@@ -1,0 +1,39 @@
+# CasaOS uygulaması. Kurulum: imajı yerelde derle (docker build -t diskman:2.0.0 .), bu dosyayı
+# /var/lib/casaos/apps/diskman/ altına koy, "docker compose up -d".
+name: diskman
+services:
+  diskman:
+    container_name: diskman
+    image: diskman:2.0.0
+    network_mode: host                 # gerçek istemci IP'leri; port 8791
+    restart: unless-stopped
+    environment:
+      TZ: Europe/Istanbul
+      HOME: /host/home/fxerkan         # ayarlar, parola özeti ve tarama önbelleği eskisiyle aynı yerde
+      DISKMAN_HOSTFS: /host
+    volumes:
+      - type: bind                     # tüm diskler (silme için yazılabilir); sonradan takılan diskler de görünür
+        source: /
+        target: /host
+        bind:
+          propagation: rslave
+      - /var/run/docker.sock:/var/run/docker.sock   # Docker sekmesi ve graf (konteyner → klasör)
+    labels:
+      icon: http://192.168.1.62:8791/icon.svg
+x-casaos:
+  main: diskman
+  architectures: [amd64, arm64]
+  author: fxerkan
+  developer: fxerkan
+  category: Utilities
+  icon: http://192.168.1.62:8791/icon.svg
+  index: /
+  port_map: "8791"
+  scheme: http
+  store_app_id: diskman
+  title:
+    en_US: DiskMan
+  tagline:
+    en_US: Disk usage, duplicates, cleanup
+  description:
+    en_US: See what fills your disks, find duplicates and old files, clean up safely.

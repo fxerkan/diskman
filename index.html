@@ -1,0 +1,800 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DiskMan</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 16V3A13 13 0 1 0 29 16Z' fill='%23ff7a45'/%3E%3Cpath d='M19 13V2a11 11 0 0 1 11 11Z' fill='%232dd4bf'/%3E%3Ccircle cx='16' cy='16' r='2.6' fill='%2315181e'/%3E%3C/svg%3E">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+:root{--bg:#0e1014;--panel:#15181e;--panel2:#1d2129;--fg:#eceef2;--mut:#8a909c;--line:#272b35;--acc:#ff7a45;--acc2:#2dd4bf;--on-acc:#1b0d05;
+ --grn:#3ccf91;--amb:#f5b843;--red:#ff4d5e;--glow:0 0 0 1px rgba(255,122,69,.10),0 8px 30px rgba(0,0,0,.35);--accbg:rgba(255,122,69,.14)}
+@media (prefers-color-scheme:light){:root{--bg:#f6f5f2;--panel:#fff;--panel2:#f1efea;--fg:#1a1c20;--mut:#636873;--line:#e4e1da;
+ --acc:#e8582a;--acc2:#0f9b8e;--on-acc:#fff;--grn:#11865a;--amb:#b26a00;--red:#d92d43;--glow:0 1px 2px rgba(0,0,0,.05),0 6px 20px rgba(60,40,20,.06);--accbg:rgba(232,88,42,.10)}}
+*{box-sizing:border-box}html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--fg);font:14px/1.45 ui-sans-serif,-apple-system,system-ui,sans-serif;display:grid;grid-template-columns:224px 1fr;grid-template-rows:auto 1fr}
+aside{grid-row:1/3;background:var(--panel);border-right:1px solid var(--line);padding:18px 12px;display:flex;flex-direction:column;gap:2px;overflow:auto}
+.logo{font-weight:800;font-size:18px;padding:0 10px 14px;display:flex;gap:9px;align-items:center;letter-spacing:-.01em}.logo em{font-style:normal;color:var(--acc)}
+.logo svg .hole{fill:var(--panel)}.logo{position:relative;cursor:default}.logo>span{display:inline}
+.about{display:none;position:absolute;left:8px;top:34px;z-index:40;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:9px 12px;font-size:12px;font-weight:400;letter-spacing:0;box-shadow:var(--glow);white-space:nowrap;line-height:1.6}
+.logo:hover .about,.logo:focus-within .about{display:block}.about a{color:var(--acc)}
+#gq{width:220px}.gdelta.up{color:var(--red)}.gdelta.dn{color:var(--grn)}
+.dg{margin-bottom:10px}.dg h4{margin:0 0 6px;font-size:13px;display:flex;gap:10px;align-items:center}
+#gsvg text{fill:var(--fg);font-size:11px;pointer-events:none;paint-order:stroke;stroke:var(--bg);stroke-width:3px}
+#gsvg .dim{opacity:.12}#gsvg .nd:not(.lbl):not(.show) text{display:none}#gsvg circle{cursor:pointer;stroke:var(--bg);stroke-width:1.5px}
+.navh{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--mut);padding:12px 12px 4px}
+aside button{all:unset;cursor:pointer;padding:8px 12px;border-radius:8px;color:var(--mut);display:flex;gap:10px;align-items:center}
+aside button:hover{background:var(--panel2);color:var(--fg)}aside button.on{background:linear-gradient(90deg,var(--accbg),transparent);color:var(--fg);box-shadow:inset 2px 0 var(--acc)}
+aside button .badge{margin-left:auto;font-size:10px;background:var(--acc);color:var(--on-acc);border-radius:9px;padding:0 6px;font-weight:700}
+aside .vols{margin-top:auto;display:flex;flex-direction:column;gap:10px;padding:14px 10px 0}
+.vol .mut{font-size:11px}.meter{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:4px}.meter i{display:block;height:100%;background:linear-gradient(90deg,var(--acc2),var(--acc))}
+.meter.hot i{background:linear-gradient(90deg,var(--amb),var(--red))}
+header{padding:12px 20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--line);background:var(--panel)}
+.crumb{display:flex;flex-wrap:wrap;gap:2px;align-items:center;font-size:13px;flex:1;min-width:200px}.crumb a{padding:2px 6px;border-radius:5px}.crumb a:hover{background:var(--panel2)}
+input,select,textarea{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:7px;padding:6px 9px;font:inherit}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--acc);outline-offset:-1px}input[type=checkbox]{accent-color:var(--acc)}
+.btn{border:1px solid var(--line);background:var(--panel2);color:var(--fg);padding:6px 12px;border-radius:7px;cursor:pointer;font:inherit;white-space:nowrap}
+.btn:hover{border-color:var(--acc)}.btn.pri{background:var(--acc);border-color:var(--acc);color:var(--on-acc);font-weight:600}.btn.danger{background:var(--red);border-color:var(--red);color:#fff}
+.btn:disabled{opacity:.4;cursor:default}.btn.sm{padding:3px 9px;font-size:12px}.btn.lg{padding:11px 20px;font-size:15px;border-radius:9px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}.seg button{all:unset;cursor:pointer;padding:5px 11px;font-size:13px;color:var(--mut)}
+.seg button.on{background:var(--acc);color:var(--on-acc)}.seg button:not(.on):hover{background:var(--panel2);color:var(--fg)}
+main{overflow:auto;padding:18px 20px;position:relative}
+.grid{display:grid;gap:14px;grid-template-columns:repeat(12,1fr)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;box-shadow:var(--glow);min-width:0}
+.card h3{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);font-weight:600}
+.kpi .v{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}.kpi .s{color:var(--mut);font-size:12px}
+.c3{grid-column:span 3}.c4{grid-column:span 4}.c6{grid-column:span 6}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.mut{color:var(--mut)}a{color:var(--acc);cursor:pointer;text-decoration:none}.sm{font-size:12px}.path{word-break:break-all}
+.donutwrap{display:flex;gap:14px;align-items:center;flex-wrap:wrap}.legend{display:flex;flex-direction:column;gap:5px;font-size:12px;flex:1;min-width:150px}
+.legend div{display:flex;gap:8px;align-items:center}.legend b{width:10px;height:10px;border-radius:3px;flex:none}.legend span:last-child{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--mut)}
+table{width:100%;border-collapse:collapse}td,th{padding:7px 9px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+th{font-size:11px;color:var(--mut);font-weight:600;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}th[data-sort]{cursor:pointer}th[data-sort]:hover{color:var(--fg)}
+tbody tr:hover td{background:var(--panel2)}tr.pend td{opacity:.4;text-decoration:line-through}
+td.sz{white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums;width:120px;position:relative}td.sz b{position:absolute;inset:4px auto 4px 0;background:linear-gradient(90deg,rgba(255,122,69,.30),rgba(45,212,191,.16));border-radius:3px}td.sz span{position:relative}
+.heat{table-layout:fixed}.heat td{border:2px solid var(--panel);text-align:center;font-size:10.5px;white-space:nowrap;overflow:hidden;font-variant-numeric:tabular-nums;padding:8px 4px;border-radius:6px;cursor:pointer}
+.heat td:not(.rl):not(.empty):hover{outline:2px solid var(--fg);outline-offset:-2px}.heat td.empty{cursor:default}
+.heat th{text-align:center;font-size:10px}.heat tr>:first-child{width:118px}.heat td.rl{text-align:left;font-size:12px;background:none!important;cursor:default}
+.bars div.r{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(40px,1fr) 70px;gap:10px;align-items:center;padding:4px 0;cursor:pointer;font-size:13px}
+.bars .t{height:14px;border-radius:4px;background:var(--line);overflow:hidden}.bars .t i{display:block;height:100%;border-radius:4px}
+.bars .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.bars .r span:last-child{text-align:right;font-variant-numeric:tabular-nums;color:var(--mut)}
+.viz{display:grid;grid-template-columns:1fr 300px;gap:14px;height:calc(100vh - 120px);min-height:460px}
+.viz .stage{position:relative;min-height:0}.viz svg{display:block;width:100%;height:100%}
+.panel{overflow:auto}.panel .big{font-size:20px;font-weight:700}.row{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px dashed var(--line);font-size:13px}
+.actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+#tip{position:fixed;pointer-events:none;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;box-shadow:var(--glow);display:none;z-index:30;max-width:360px;word-break:break-all}
+.tag{font-size:11px;padding:1px 7px;border-radius:9px;border:1px solid currentColor;white-space:nowrap}.safe,.high{color:var(--grn)}.regen,.medium{color:var(--amb)}.low{color:var(--mut)}.risky{color:var(--red)}
+.grp td{background:var(--panel2);font-weight:600}
+.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}.sum{margin-left:auto;font-weight:600}
+.spin{padding:60px 20px;text-align:center;color:var(--mut)}
+.prog{position:relative;height:4px;background:var(--line);overflow:hidden;border-radius:2px;margin-top:10px}.prog i{position:absolute;inset:0 60% 0 0;background:var(--acc);animation:sl 1.2s infinite ease-in-out}
+@keyframes sl{0%{left:-40%;right:100%}100%{left:100%;right:-40%}}
+.toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 14px;border-radius:8px;max-width:520px;display:none;z-index:40}
+#jobs{position:fixed;bottom:16px;right:16px;display:flex;flex-direction:column;gap:8px;z-index:35;width:340px;max-width:calc(100vw - 32px)}
+.job{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:11px 13px;box-shadow:0 10px 30px rgba(0,0,0,.35);font-size:13px}
+.job .jh{display:flex;gap:8px;align-items:center;justify-content:space-between}.job .jh b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.job .jh button{all:unset;cursor:pointer;color:var(--mut);padding:0 4px}.job .jh button:hover{color:var(--fg)}
+.job .jb{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin:8px 0 6px}.job .jb i{display:block;height:100%;background:linear-gradient(90deg,var(--acc2),var(--acc));transition:width .4s}
+.job.ok .jb i{background:var(--grn)}.job .cur{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left}
+.quick{display:flex;gap:22px;align-items:center;flex-wrap:wrap;background:linear-gradient(120deg,var(--accbg),transparent 60%),var(--panel)}
+.quick .v{font-size:34px;font-weight:800;color:var(--acc);font-variant-numeric:tabular-nums;line-height:1.1}.quick .bars{flex:1;min-width:240px}
+svg text{font:11px ui-sans-serif,-apple-system,system-ui,sans-serif;pointer-events:none}
+.tm rect,.ic rect,.pk circle{cursor:pointer}.tm g:hover>rect,.ic g:hover>rect{opacity:.85}.pk circle:hover{stroke:var(--fg);stroke-width:1.5}
+.sb path{cursor:pointer;stroke:var(--bg);stroke-width:1}.sb path:hover{opacity:.8}
+.axis text{fill:var(--mut)}.axis path,.axis line{stroke:var(--line)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}.chip{all:unset;cursor:pointer;font-size:12px;padding:3px 10px;border-radius:14px;border:1px solid var(--line);color:var(--mut);display:inline-flex;gap:6px;align-items:center}
+.chip.on{color:var(--fg);border-color:currentColor;background:var(--panel2)}.chip b{width:8px;height:8px;border-radius:50%}
+.tiles{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;position:relative;cursor:pointer;min-width:0}
+.tile:hover{border-color:var(--acc)}.tile.sel{border-color:var(--acc);box-shadow:0 0 0 2px var(--acc)}.tile input{position:absolute;top:8px;left:8px;z-index:2}
+.tile .ic{height:96px;display:flex;align-items:center;justify-content:center;font-size:44px;border-radius:7px;background:var(--panel2);overflow:hidden}
+.tile .ic img{width:100%;height:100%;object-fit:cover}.tile .nm{font-size:12px;margin-top:7px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tile .mt{font-size:11px;color:var(--mut);display:flex;justify-content:space-between}
+.photos{display:grid;gap:6px;grid-template-columns:repeat(auto-fill,minmax(var(--ph,180px),1fr))}
+.ph{position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:var(--panel2);cursor:zoom-in}
+.ph img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .2s}.ph:hover img{transform:scale(1.04)}
+.ph input{position:absolute;top:7px;left:7px;z-index:2}.ph .cap{position:absolute;inset:auto 0 0 0;padding:16px 8px 6px;background:linear-gradient(transparent,rgba(0,0,0,.75));color:#fff;font-size:11px;display:flex;justify-content:space-between;gap:6px}
+.ph .cap span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ph.sel{outline:3px solid var(--acc)}.ph .vid{position:absolute;top:7px;right:8px;color:#fff;text-shadow:0 1px 3px #000}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:20;display:flex;align-items:center;justify-content:center;padding:24px}
+.modal .box{background:var(--panel);border:1px solid var(--line);border-radius:14px;max-width:1100px;width:100%;max-height:100%;overflow:auto;padding:18px 20px;box-shadow:var(--glow)}
+.modal .x{float:right}.lb{display:grid;grid-template-columns:1fr 280px;gap:16px}.lb img{max-width:100%;max-height:78vh;display:block;margin:auto;border-radius:8px}
+.warn{background:rgba(245,184,67,.12);border:1px solid var(--amb);color:var(--fg);border-radius:9px;padding:9px 12px;margin-bottom:12px;font-size:13px}
+.form{display:grid;gap:12px}.form label{display:flex;flex-direction:column;gap:5px;font-size:13px}.form .chk{flex-direction:row;align-items:flex-start;gap:9px}
+.form .chk small{display:block;color:var(--mut)}
+@media (max-width:900px){body{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto 1fr}header>div:last-child{flex:1 1 100%;min-width:0}#chg{flex-basis:100%;order:3;margin:0!important}#root{flex:1;min-width:0;max-width:none!important}aside{grid-row:auto;flex-direction:row;overflow:auto;padding:8px}aside .logo,aside .vols,.navh{display:none}#gq{flex:1;min-width:0;width:auto}
+ .c3,.c4,.c6,.c8{grid-column:span 12}.viz,.lb{grid-template-columns:1fr;height:auto}.viz .stage{height:65vh}main{padding:12px 16px}}
+</style></head><body>
+<aside>
+ <div class="logo"><svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true"><path d="M16 16V3A13 13 0 1 0 29 16Z" fill="var(--acc)"/><path d="M19 13V2a11 11 0 0 1 11 11Z" fill="var(--acc2)"/><circle class="hole" cx="16" cy="16" r="2.6"/></svg><span>Disk<em>Man</em></span><div class="about" id="about"></div></div>
+ <div class="navh">Analyze</div>
+ <button data-t="overview" class="on">◎ Overview</button>
+ <button data-t="treemap">▦ Treemap</button>
+ <button data-t="sunburst">◔ Sunburst</button>
+ <button data-t="charts">◈ Charts</button>
+ <button data-t="explorer">▤ File explorer</button>
+ <button data-t="graph">⬡ Graph</button>
+ <div class="navh">Find</div>
+ <button data-t="search">⌕ Search</button>
+ <button data-t="big">⬛ Large files</button>
+ <button data-t="dupes">⧉ Duplicates</button>
+ <button data-t="old">⏳ Old files</button>
+ <button data-t="empty">▢ Empty folders</button>
+ <button data-t="growth">↗ Growth</button>
+ <div class="navh">Clean up</div>
+ <button data-t="suggest">✧ Suggestions <span class="badge" id="sugb" hidden></span></button>
+ <button data-t="clean">✦ Cleanup rules</button>
+ <button data-t="docker">🐳 Docker</button>
+ <button data-t="settings">⚙ Auto-clean & settings</button>
+ <div class="vols" id="vols"></div>
+</aside>
+<header>
+ <div class="crumb" id="crumb"></div>
+ <input id="gq" type="search" placeholder="Search files and folders  /" aria-label="Search files and folders">
+ <div class="mut sm" id="chg" style="margin-left:auto;margin-right:12px"></div>
+ <div style="display:flex;gap:8px"><select id="root" aria-label="Folder to scan" style="max-width:320px"></select>
+ <button class="btn pri" id="scan">Scan</button></div>
+</header>
+<main id="main"></main>
+<div id="tip"></div><div class="toast" id="toast"></div><div id="jobs"></div><div id="modal"></div>
+<script>
+const $=s=>document.querySelector(s);
+const api=(p,o={})=>fetch(p,{...o,headers:{'X-DM':'1','Content-Type':'application/json'}}).then(async r=>{if(r.status===401)location.reload(); // oturum bitti → giriş sayfası
+ const j=await r.json();if(!r.ok)throw new Error(j.error||r.status);return j});
+const post=(p,b)=>api(p,{method:'POST',body:JSON.stringify(b)});
+const q=encodeURIComponent;
+const fmt=b=>{if(b==null||b<0)return '—';const u=['B','KB','MB','GB','TB'];let i=0;while(b>=1024&&i<4){b/=1024;i++}return b.toFixed(i>1?1:0)+' '+u[i]};
+const num=n=>n==null?'—':n.toLocaleString('en-US');
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const plural=(n,w)=>`${num(n)} ${w}${n===1?'':'s'}`;
+const age=t=>{const d=(Date.now()/1000-t)/86400;return d<1?'today':d<60?plural(Math.round(d),'day')+' ago':d<730?plural(Math.round(d/30),'month')+' ago':plural(Math.round(d/365),'year')+' ago'};
+const thumbUrl=(p,s=256)=>`/api/thumb?s=${s}&path=${q(p)}`;
+// one color system: folder branches use PAL, file types use TYPE_COL — same in every chart
+const PAL=['#ff7a45','#2dd4bf','#8b8cf8','#f5b843','#f472b6','#5aa9ff','#9ad15a','#c084fc','#fb7185','#38bdf8','#facc15','#34d399','#e879f9','#a3a3ff'];
+const TYPE_COL=['#f472b6','#ff7a45','#f5b843','#9ad15a','#5aa9ff','#2dd4bf','#8b8cf8','#ff4d5e','#22c3d6','#c084fc','#6b7280'];
+const TYPE_ICO=['🎬','🖼️','🎵','🗜️','📄','💻','📦','💿','🗄️','🧠','📄'];
+const MEDIA=new Set([0,1]),THUMBABLE=new Set([0,1,4]);
+const S={tab:'overview',focus:null,status:null,sel:null,home:''};
+const store={get(k,d){try{return JSON.parse(localStorage.getItem('dm.'+k))??d}catch{return d}},set(k,v){try{localStorage.setItem('dm.'+k,JSON.stringify(v))}catch{}}};
+const short=p=>{if(p==='*')return 'All disks';if(p&&S.home&&p.startsWith(S.home))return '~'+p.slice(S.home.length);
+ const h=S.status?.hostfs;return h&&p&&(p===h||p.startsWith(h+'/'))?p.slice(h.length)||'/':p}; // container: hide the /host prefix
+// '*' = all disks merged into one tree; its children are the disk roots
+const within=(p,r)=>p===r||p.startsWith(r.replace(/\/$/,'')+'/');
+const inView=p=>{const r=S.status?.root;return !!(p&&r)&&(r==='*'||within(p,r))};
+const diskOf=p=>(S.status?.volumes||[]).filter(v=>within(p,v.scan)).sort((a,b)=>b.scan.length-a.scan.length)[0];
+const upOf=p=>{const s=S.status;if(p==='*')return p;if(s?.root==='*'&&s.volumes.some(v=>v.scan===p))return '*';
+ let u=p.replace(/\/[^/]+\/?$/,'');if(/^[A-Za-z]:$/.test(u))u+='/';return u||'/'};
+const textOn=c=>d3.hsl(c).l>.55?'#1a1c20':'#fff';
+function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(t._h);t._h=setTimeout(()=>t.style.display='none',7000)}
+const tip=$('#tip');
+function showTip(e,html){tip.innerHTML=html;tip.style.display='block';const x=Math.min(e.clientX+14,innerWidth-tip.offsetWidth-8),y=Math.min(e.clientY+14,innerHeight-tip.offsetHeight-8);tip.style.left=x+'px';tip.style.top=y+'px'}
+const hideTip=()=>tip.style.display='none';
+const tipHtml=(d,total)=>`<b>${esc(d.name)}</b><br>${fmt(d.size)}${total?` · ${(d.size/total*100).toFixed(1)}%`:''}${d.n!=null&&d.kind==='dir'?` · ${plural(d.n,'file')}`:''}${d.mtime?`<br><span class="mut">${age(d.mtime)}</span>`:''}${d.kind==='other'||d.kind==='small'?'<br><span class="mut">grouped</span>':''}`;
+const spinner=(m='Loading…')=>`<div class="spin">${m}<div class="prog" style="max-width:300px;margin:12px auto"><i></i></div></div>`;
+const loading=m=>$('#main').innerHTML=spinner(m);
+const fail=e=>$('#main').innerHTML=`<div class="spin">Error: ${esc(e.message)}</div>`;
+
+// ---------- status / scanning ----------
+const when=t=>new Date(t*1000).toLocaleString('en-GB',{dateStyle:'short',timeStyle:'short'});
+const extraRoots=store.get('roots',[]);
+function rootOptions(s){const seen=new Set(),opt=(p,l)=>seen.has(p)?'':(seen.add(p),`<option value="${esc(p)}">${esc(l||short(p))}</option>`);
+ const grp=(l,h)=>h?`<optgroup label="${l}">${h}</optgroup>`:'';
+ return grp('Disks',opt('*',`All disks — merged (${s.volumes.length})`)+s.volumes.map(v=>opt(v.scan,`${v.name} · ${short(v.path)} · ${fmt(v.used)} used`)).join(''))
+  +grp('Previous scans',s.cached.map(c=>opt(c.path,`${short(c.path)} · ${fmt(c.bytes)} · ${when(c.end)}`)).join(''))
+  +grp('Home folder',[s.home,...s.homedirs].map(p=>opt(p)).join(''))
+  +grp('Other',extraRoots.map(p=>opt(p)).join(''))
+  +'<option value="__other">Other folder…</option>'}
+function renderChg(s){const e=$('#chg');
+ e.innerHTML=s.checking?'Checking for changes since the last scan…'
+  :s.running||!s.done?''
+  :s.changed?`<b style="color:var(--fg)">${plural(s.changed,'folder')} changed</b> (last scan ${when(s.end)}) <button class="btn" data-scan="inc">Rescan changes</button> <button class="btn" data-scan="full">Full scan</button>`
+  :`${s.from_cache?'From cache':'Scanned'} · ${when(s.end)} · up to date <button class="btn" data-scan="full">Full scan</button>`}
+async function startScan(mode,root){try{await post('/api/scan',{root:root??S.status?.root,mode});S.sel=null;cache={};poll()}catch(e){toast('Error: '+e.message)}}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-scan]');if(b)startScan(b.dataset.scan)});
+$('#root').onchange=()=>{const el=$('#root'),v=el.value,s=S.status;
+ // already-scanned disk or the merged view: switch right away (loads from cache, then checks for changes)
+ if(v==='*'||s?.roots?.some(r=>r.root===v&&r.done)){S.focus=null;return startScan('auto',v)}
+ if(v!=='__other')return;
+ const p=(prompt('Full path of the folder to scan:',S.home)||'').trim();
+ if(p){if(!extraRoots.includes(p)){extraRoots.push(p);store.set('roots',extraRoots)}el.innerHTML=rootOptions(S.status);el.value=p}else el.value=S.status.root||S.home};
+async function poll(){const prev=S.status;
+ try{S.status=await api('/api/status')}catch(e){return setTimeout(poll,2000)}
+ const s=S.status;S.home=s.home;const el=$('#root'),html=rootOptions(s);
+ $('#about').innerHTML=`DiskMan <b>v${esc(s.version)}</b><br><a href="${esc(s.repo)}" target="_blank" rel="noopener">${esc(s.repo.replace('https://',''))}</a>`;
+ if(el._h!==html){const v=el.value&&el.value!=='__other'?el.value:s.root||s.home;el.innerHTML=html;el._h=html;el.value=v}
+ renderChg(s);drawVols(s);
+ $('#scan').disabled=s.running||s.checking;
+ if(s.running){if(NEEDS_TREE.has(S.tab))renderProgress();setTimeout(poll,1000);return}
+ if(s.done&&(!inView(S.focus)||s.root!==prev?.root||s.end!==prev?.end||prev?.running)){if(!inView(S.focus))S.focus=s.root;cache={};render();loadSugBadge()}
+ if(s.checking)return setTimeout(poll,1000);
+ setTimeout(poll,15000);
+}
+const drawVols=s=>$('#vols').innerHTML=s.volumes.map(v=>`<div class="vol"><div>${esc(v.name)}</div><div class="meter ${v.used/v.total>.9?'hot':''}"><i style="width:${v.used/v.total*100}%"></i></div><div class="mut">${fmt(v.free)} free of ${fmt(v.total)}</div></div>`).join('');
+const NEEDS_TREE=new Set(['overview','treemap','sunburst','charts','big','search','dupes','old','empty','growth','graph']);
+function renderProgress(){const s=S.status,run=s.roots.filter(r=>r.running&&(s.root==='*'?s.volumes.some(v=>v.scan===r.root):r.root===s.root));
+ $('#main').innerHTML=`<div class="card" style="max-width:640px;margin:40px auto"><h3>Scanning${run.length>1?` ${run.length} disks in parallel`:''}</h3><div class="kpi"><div class="v">${fmt(s.bytes)}</div>
+ <div class="s">${plural(s.files,'file')} · ${plural(s.dirs,'folder')} · ${Math.round(s.now-s.start)} s</div></div>
+ ${run.length>1?run.map(r=>`<div class="sm" style="margin-top:8px"><b>${esc(short(r.root))}</b> · ${fmt(r.bytes)} · ${plural(r.files,'file')}<div class="mut path">${esc(short(r.cur))}</div></div>`).join(''):`<div class="mut sm path" style="margin-top:8px">${esc(short(s.cur))}</div>`}<div class="prog"><i></i></div>
+ <p class="mut sm">${s.kind==='inc'?'Only changed folders are being scanned.':s.kind==='cache'?'Loading the previous scan.':'A home folder takes about a minute.'} Meanwhile you can check <a data-t="clean">Cleanup rules</a>, <a data-t="docker">Docker</a>, the <a data-t="explorer">File explorer</a> or <a data-t="settings">Settings</a>.</p></div>`}
+$('#scan').onclick=()=>{const r=$('#root').value;if(r!==S.status?.root)S.focus=null;startScan('auto',r)};
+async function loadSugBadge(){try{const s=await get('/api/suggest');const b=$('#sugb');const n=s.filter(x=>x.confidence==='high').length;b.hidden=!n;b.textContent=n}catch{}}
+
+// ---------- navigation (browser back/forward walks tab + folder history) ----------
+let cache={};
+const get=async u=>cache[u]??=await api(u);
+function setFocus(p){if(!p)return;S.focus=p;S.sel=null;EX.search=null;render()}
+function go(tab){S.tab=tab;render()}
+function syncHistory(){const h=history.state;if(h&&h.tab===S.tab&&h.focus===S.focus)return;
+ (h?history.pushState:history.replaceState).call(history,{tab:S.tab,focus:S.focus},'')}
+addEventListener('popstate',e=>{const st=e.state;if(!st)return;S.tab=st.tab;S.focus=st.focus;S.sel=null;EX.search=null;closeModal();render()});
+function crumb(){const s=S.status;if(!s||!s.root||!S.focus){$('#crumb').innerHTML='';return}
+ const all=s.root==='*',f=S.focus,root=all?(f==='*'?'*':diskOf(f)?.scan||'/'):within(f,s.root)?s.root:'/',
+  rel=root==='*'?[]:f.slice(root.length).split('/').filter(Boolean);let acc=root;
+ $('#crumb').innerHTML=(all&&root!=='*'?`<a data-go="*">All disks</a><span class="mut">›</span>`:'')+`<a data-go="${esc(root)}">${esc(short(root))}</a>`+rel.map(p=>{acc=acc.replace(/\/$/,'')+'/'+p;return `<span class="mut">›</span><a data-go="${esc(acc)}">${esc(p)}</a>`}).join('')+
+ (f!==s.root?` <a class="mut sm" data-go="${esc(upOf(f))}" title="Up">⤴</a>`:'')}
+const VIEWS={overview,treemap:()=>viz('treemap'),sunburst:()=>viz('sunburst'),charts,explorer,big,suggest,clean,docker,settings,
+ search:searchView,dupes,old:oldFiles,empty:emptyView,growth:growthView,graph:graphView};
+let RV=0;const stale=rv=>rv!==RV; // a slow response must not overwrite a newer page
+function render(){RV++;
+ document.querySelectorAll('aside button').forEach(b=>b.classList.toggle('on',b.dataset.t===S.tab));hideTip();
+ if(!S.focus&&S.status)S.focus=S.status.root||S.status.home;
+ syncHistory();
+ if(S.status?.running&&NEEDS_TREE.has(S.tab))return renderProgress();
+ crumb();VIEWS[S.tab]()}
+
+// ---------- selection + delete (each list has its own scope) ----------
+const SC={},PEND=new Set(); // PEND: paths queued for deletion, greyed out until their job finishes
+function scope(id,rows){SC[id]={rows,sel:new Set()};return SC[id]}
+function selBar(id,defMode,extra=''){return `<div class="bar">${extra}<span class="sum" id="sum-${id}"></span><button class="btn sm" data-csv="${id}" title="Download this list as CSV">⇩ CSV</button><select id="mode-${id}" aria-label="Delete mode"><option value="trash" ${defMode==='trash'?'selected':''}>Move to Trash</option><option value="rm" ${defMode==='rm'?'selected':''}>Delete permanently</option></select>
+ <button class="btn danger" data-delsel="${id}" disabled>Delete selected</button></div>`}
+function upd(id){const s=SC[id];if(!s)return;const tot=s.rows.filter(r=>s.sel.has(r.path)).reduce((a,r)=>a+Math.max(0,r.size||0),0);
+ const e=$('#sum-'+id),b=document.querySelector(`[data-delsel="${id}"]`);if(e)e.textContent=s.sel.size?`${plural(s.sel.size,'item')} · ${fmt(tot)}`:'';if(b)b.disabled=!s.sel.size}
+const pend=p=>PEND.has(p)?'class="pend"':'';
+const cbox=(p,sc)=>`<input type=checkbox data-p="${esc(p)}" data-sc="${sc}" aria-label="Select" ${PEND.has(p)?'disabled':''}>`;
+async function doDelete(paths,mode,total,opts={}){
+ if(!confirm(`${plural(paths.length,'item')} (${fmt(total)}) will be ${mode==='rm'?'PERMANENTLY deleted':'moved to the Trash'} in the background.\n\n`+paths.slice(0,15).map(short).join('\n')+(paths.length>15?'\n…':'')))return null;
+ const r=await post(opts.url||'/api/delete',{paths,mode,contents:opts.contents||[]});
+ paths.forEach(p=>PEND.add(p));Object.values(SC).forEach(s=>paths.forEach(p=>s.sel.delete(p)));S.sel=null;
+ trackJob(r.id,paths);return r}
+
+// ---------- background jobs: queued on the server, progress shown as toasts ----------
+const MINE={},HIDE=new Set();let jobT=null,JOBS=[];
+function trackJob(id,paths=[]){MINE[id]={paths,open:true};pollJobs()}
+async function pollJobs(){clearTimeout(jobT);
+ try{JOBS=await api('/api/jobs')}catch{jobT=setTimeout(pollJobs,2000);return}
+ let active=false,finished=[];
+ for(const j of JOBS){if(!MINE[j.id]&&j.status!=='done')MINE[j.id]={paths:[],open:true}; // e.g. after a reload
+  const m=MINE[j.id];if(!m)continue;if(j.status!=='done')active=true;else if(m.open){m.open=false;finished.push(j)}}
+ drawJobs();
+ if(finished.length)afterJobs(finished);
+ if(active)jobT=setTimeout(pollJobs,600)}
+function drawJobs(){$('#jobs').innerHTML=JOBS.filter(j=>MINE[j.id]&&!HIDE.has(j.id)).map(j=>{
+  const done=j.status==='done',p=done?100:Math.round(100*(j.total?j.bytes/j.total:j.n?j.done/j.n:0)),err=j.errors.length;
+  return `<div class="job ${done&&!err?'ok':''}" role="status"><div class="jh"><b title="${esc(j.title)}">${done?(err?'⚠ ':'✓ '):''}${esc(j.title)}</b><button data-jx="${j.id}" aria-label="Dismiss">✕</button></div>
+  <div class="jb"><i style="width:${p}%"></i></div>
+  <div class="sm mut">${j.status==='queued'?'Queued…':`${p}% · ${num(j.done)}/${num(j.n)} items${j.total?` · ${fmt(j.bytes)} of ${fmt(j.total)}`:''}`}</div>
+  ${done?`<div class="sm" style="margin-top:4px">${j.freed?`<b>${fmt(j.freed)}</b> freed`:'Finished'}${err?` · <span class="risky" title="${esc(j.errors.slice(0,8).map(x=>short(x.path)+': '+x.error).join('\n'))}">${plural(err,'error')}</span>`:''}${j.note?`<div class="mut">${esc(j.note)}</div>`:''}</div>`
+  :j.cur?`<div class="sm mut cur" title="${esc(j.cur)}">${esc(short(j.cur))}</div>`:''}</div>`}).join('')}
+async function afterJobs(finished){
+ for(const j of finished){const failed=new Set(j.errors.map(e=>e.path)),ok=MINE[j.id].paths.filter(p=>!failed.has(p));
+  MINE[j.id].paths.forEach(p=>PEND.delete(p));
+  if(EX.search)EX.search.rows=EX.search.rows.filter(r=>!ok.includes(r.path));
+  if(ok.includes(S.focus))S.focus=S.focus.replace(/\/[^/]+$/,'')||'/';
+  setTimeout(()=>{HIDE.add(j.id);drawJobs()},15000)}
+ cache={};try{S.status=await api('/api/status');drawVols(S.status)}catch{}
+ if(!$('#modal').innerHTML)render();loadSugBadge()}
+
+// ---------- chart helpers ----------
+function donut(el,data,center,sub,onClick){const W=180,R=W/2,tot=d3.sum(data,d=>d.value)||1;
+ const svg=d3.select(el).append('svg').attr('viewBox',`0 0 ${W} ${W}`).style('width',W+'px').style('height',W+'px');
+ const g=svg.append('g').attr('transform',`translate(${R},${R})`);
+ g.selectAll('path').data(d3.pie().value(d=>d.value).sort(null).padAngle(.012)(data)).join('path')
+  .attr('d',d3.arc().innerRadius(R*.62).outerRadius(R-2).cornerRadius(3)).attr('fill',d=>d.data.color)
+  .on('mousemove',(e,d)=>showTip(e,`<b>${esc(d.data.label)}</b><br>${fmt(d.data.value)} · ${(d.data.value/tot*100).toFixed(1)}%${onClick?'<br><span class="mut">click → filter in explorer</span>':''}`)).on('mouseleave',hideTip)
+  .on('click',(e,d)=>onClick&&onClick(d.data)).style('cursor',onClick?'pointer':'default');
+ g.append('text').attr('text-anchor','middle').attr('dy','-.1em').style('font-size','17px').style('font-weight',700).style('fill','var(--fg)').text(center);
+ g.append('text').attr('text-anchor','middle').attr('dy','1.4em').style('fill','var(--mut)').text(sub);
+ const lg=document.createElement('div');lg.className='legend';
+ lg.innerHTML=data.map(d=>`<div><b style="background:${d.color}"></b><span>${esc(d.label)}</span><span>${fmt(d.value)}</span></div>`).join('');el.append(lg)}
+const heatBg=(i,v,mx)=>d3.interpolateRgb(getComputedStyle(document.body).getPropertyValue('--panel2').trim()||'#1d2129',TYPE_COL[i])(.18+.82*Math.sqrt(v/mx));
+
+// ---------- overview ----------
+async function overview(){const rv=RV;loading();try{
+ const s=S.status,f=S.focus;
+ const [tree,st]=await Promise.all([get(`/api/tree?path=${q(f)}&depth=1&top=12`),get(`/api/stats?path=${q(f)}`)]);if(stale(rv))return;
+ const vol=f==='*'?{name:'All disks',total:d3.sum(s.volumes,v=>v.total),used:d3.sum(s.volumes,v=>v.used),free:d3.sum(s.volumes,v=>v.free)}:diskOf(f)||s.volumes[0];
+ const typeTot=st.heat.map(r=>d3.sum(r)),ageTot=st.ages.map((_,j)=>d3.sum(st.heat,r=>r[j]));
+ $('#main').innerHTML=`<div class="grid">
+ <div class="card kpi c3"><h3>Total disk</h3><div class="v">${fmt(vol.total)}</div><div class="s">${esc(vol.name)}</div></div>
+ <div class="card kpi c3"><h3>Used</h3><div class="v">${fmt(vol.used)}</div><div class="meter ${vol.used/vol.total>.9?'hot':''}"><i style="width:${vol.used/vol.total*100}%"></i></div><div class="s">${(vol.used/vol.total*100).toFixed(1)}% full</div></div>
+ <div class="card kpi c3"><h3>Free space</h3><div class="v" style="color:${vol.free/vol.total<.1?'var(--red)':'var(--grn)'}">${fmt(vol.free)}</div><div class="s">${(vol.free/vol.total*100).toFixed(1)}% free</div></div>
+ <div class="card kpi c3"><h3>Suggested cleanup</h3><div class="v" id="ksug">…</div><div class="s"><a data-t="suggest">open suggestions →</a></div></div>
+ <div class="card c12 quick"><div style="min-width:220px"><h3>Quick clean</h3><div class="v" id="qv">…</div><div class="mut sm" id="qs">Estimating what can be removed safely…</div></div>
+  <div class="bars" id="qbars"></div><button class="btn pri lg" id="qrun" disabled>Free up space</button></div>
+ <div class="card c4"><h3>Disk breakdown</h3><div class="donutwrap" id="d1"></div></div>
+ <div class="card c4"><h3>File types · ${esc(tree.name.split('/').pop()||tree.name)}</h3><div class="donutwrap" id="d2"></div></div>
+ <div class="card c4"><h3>File ages</h3><div class="donutwrap" id="d3"></div></div>
+ <div class="card c8"><h3>Heatmap · type × last modified <span class="mut" style="text-transform:none;letter-spacing:0">— click a cell to see its files</span></h3><div style="overflow:auto"><table class="heat" id="heat"></table></div></div>
+ <div class="card c4"><h3>Largest items</h3><div class="bars" id="bars"></div></div>
+ <div class="card c12 kpi"><h3>Scan</h3><div class="s">${esc(short(s.root))} · ${fmt(s.bytes)} · ${plural(s.files,'file')} · ${plural(s.dirs,'folder')} · ${s.kind==='inc'?'incremental update':s.kind==='cache'?'from cache':'full scan'} ${when(s.end)}${s.kind==='inc'?` (charts: full scan ${when(s.full_at)})`:''}${s.errors?` · ${plural(s.errors,'folder')} unreadable (permissions)`:''}</div></div></div>`;
+ donut($('#d1'),[{label:'Scanned: '+(s.root===s.home?'home folder':short(s.root)),value:s.bytes,color:PAL[0]},{label:'System / other',value:Math.max(0,vol.used-s.bytes),color:PAL[1]},{label:'Free',value:vol.free,color:'#3a3f4b'}],fmt(vol.free),'free');
+ const types=st.types.map((t,i)=>({label:t,value:typeTot[i],color:TYPE_COL[i],i})).filter(d=>d.value>0).sort((a,b)=>b.value-a.value);
+ donut($('#d2'),types,fmt(tree.size),plural(tree.n,'file'),d=>{EX.types=[d.i];saveEX();go('explorer')});
+ const AC=d3.quantize(d3.interpolateRgb(PAL[1],PAL[0]),st.ages.length);
+ donut($('#d3'),st.ages.map((a,i)=>({label:a,value:ageTot[i],color:AC[i]})).filter(d=>d.value>0),fmt(d3.sum(ageTot.slice(4))),'older than 1 year');
+ const mx=d3.max(st.heat.flat())||1;
+ $('#heat').innerHTML='<tr><th></th>'+st.ages.map(a=>`<th>${a}</th>`).join('')+'</tr>'+st.types.map((t,i)=>typeTot[i]?`<tr><td class="rl"><b style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${TYPE_COL[i]}"></b> ${t}</td>`+
+  st.heat[i].map((v,j)=>{if(!v)return '<td class="empty"></td>';const bg=heatBg(i,v,mx);return `<td data-cell="${i},${j}" style="background:${bg};color:${textOn(bg)}" title="${t} · ${st.ages[j]}: ${fmt(v)} — click">${fmt(v)}</td>`}).join('')+'</tr>':'').join('');
+ const kids=(tree.children||[]),top=kids[0]?.size||1;
+ $('#bars').innerHTML=kids.map((k,i)=>`<div class="r" ${k.kind==='dir'?`data-go="${esc(k.path)}"`:''} title="${esc(k.path)}"><span class="n">${k.kind==='dir'?'📁':k.kind==='file'?TYPE_ICO[k.type]:'⋯'} ${esc(k.name)}</span><span class="t"><i style="width:${k.size/top*100}%;background:${PAL[i%PAL.length]}"></i></span><span>${fmt(k.size)}</span></div>`).join('');
+ get('/api/suggest').then(r=>{const e=$('#ksug');if(e)e.textContent=fmt(d3.sum(r.filter(x=>x.action!=='info'&&x.confidence!=='low'),x=>x.size))}).catch(()=>{});
+ get('/api/quick').then(qk=>{if(stale(rv))return;const mx=qk.groups[0]?.size||1;
+  $('#qv').textContent='~'+fmt(qk.total);
+  $('#qs').innerHTML=`can be freed safely right now — caches, logs and build leftovers that apps rebuild.${qk.browsers_running?.length?`<br>${esc(qk.browsers_running.join(', '))} open: their caches will be skipped.`:''}`;
+  $('#qbars').innerHTML=qk.groups.slice(0,6).map((g,i)=>`<div class="r" data-t="clean" title="${plural(g.n,'item')}"><span class="n">${esc(g.name)}</span><span class="t"><i style="width:${g.size/mx*100}%;background:${PAL[i%PAL.length]}"></i></span><span>${fmt(g.size)}</span></div>`).join('');
+  const b=$('#qrun');b.disabled=!qk.total;b.onclick=async()=>{
+   if(!confirm(`Quick clean will permanently delete about ${fmt(qk.total)}:\n\n`+qk.groups.map(g=>`• ${g.name} — ${fmt(g.size)}`).join('\n')+'\n\nThese are caches and leftovers; apps recreate them as needed.'))return;
+   try{const r=await post('/api/quick/run',{});b.disabled=true;trackJob(r.id)}catch(e){toast('Error: '+e.message)}}}).catch(e=>{const el=$('#qs');if(el)el.textContent='Could not estimate: '+e.message});
+}catch(e){fail(e)}}
+
+async function heatCell(i,j){
+ openModal(spinner());
+ try{const c=await api(`/api/cell?path=${q(S.focus)}&type=${i}&age=${j}`);scope('cell',c.files);
+ openModal(`<button class="btn x" data-close>✕</button><h2 style="margin:0 0 4px"><span style="color:${TYPE_COL[i]}">●</span> ${esc(c.type)} · ${esc(c.age)}</h2>
+ <div class="mut sm" style="margin-bottom:12px">${fmt(c.total)} total under ${esc(short(S.focus))} · ${plural(c.count,'large file')}${c.small>0?` · files under 1 MB: ${fmt(c.small)} (not listed individually)`:''}</div>
+ ${c.files.length&&MEDIA.has(i)?`<div class="photos" style="--ph:120px;margin-bottom:14px">${c.files.slice(0,24).map(f=>`<div class="ph" data-lb="${esc(f.path)}" data-sc="cell"><img loading="lazy" src="${thumbUrl(f.path,240)}" alt="" onerror="this.style.opacity=0"><div class="cap"><span>${esc(f.path.split('/').pop())}</span><span>${fmt(f.size)}</span></div></div>`).join('')}</div>`:''}
+ ${selBar('cell','trash')}${fileTable('cell',c.files,{path:true})}`);upd('cell')}catch(e){openModal(`<button class="btn x" data-close>✕</button>Error: ${esc(e.message)}`)}}
+
+// ---------- treemap / sunburst ----------
+function branchColor(root){return d=>{if(d.data.kind==='other'||d.data.kind==='small')return '#4b5260';let a=d;while(a.depth>1)a=a.parent;
+ const c=d3.hsl(PAL[Math.max(0,(root.children||[]).indexOf(a))%PAL.length]);if(d.data.kind==='file')c.l=Math.min(.75,c.l+.08);else c.l-=(d.depth-1)*.08;return c+''}}
+const nodeClick=data=>(e,d)=>{e.stopPropagation();if(d.data.kind==='dir'&&d.depth>0)setFocus(d.data.path);else{S.sel=d.data;panel(data)}};
+async function viz(kind){const rv=RV;loading();try{
+ const f=S.focus,data=await get(kind==='treemap'?`/api/tree?path=${q(f)}&depth=2&top=36`:`/api/tree?path=${q(f)}&depth=3&top=18`);if(stale(rv))return;
+ $('#main').innerHTML=`<div class="viz"><div class="card stage" id="stage" style="padding:8px"></div><div class="card panel" id="panel"></div></div>`;
+ const stage=$('#stage'),W=stage.clientWidth-16,H=stage.clientHeight-16,total=data.size||1;
+ const root=d3.hierarchy(data).sum(d=>d.children&&d.children.length?0:Math.max(d.size,0)).sort((a,b)=>b.value-a.value);
+ const color=branchColor(root),onClick=nodeClick(data);
+ const svg=d3.select(stage).append('svg').attr('viewBox',`0 0 ${W} ${H}`);
+ if(kind==='treemap'){
+  d3.treemap().size([W,H]).paddingOuter(3).paddingTop(d=>d.depth===0?3:18).paddingInner(2).round(true)(root);
+  const g=svg.append('g').attr('class','tm').selectAll('g').data(root.descendants().slice(1)).join('g').attr('transform',d=>`translate(${d.x0},${d.y0})`);
+  g.append('rect').attr('width',d=>Math.max(0,d.x1-d.x0)).attr('height',d=>Math.max(0,d.y1-d.y0)).attr('rx',4)
+   .attr('fill',d=>d.children?d3.color(color(d)).darker(1.6)+'':color(d)).attr('stroke',d=>d.children?color(d):'none').attr('stroke-opacity',.5)
+   .on('mousemove',(e,d)=>showTip(e,tipHtml(d.data,total))).on('mouseleave',hideTip).on('click',onClick);
+  g.filter(d=>d.x1-d.x0>44&&(d.children?true:d.y1-d.y0>28)).append('text').attr('x',5).attr('y',13)
+   .text(d=>{const w=(d.x1-d.x0-10)/6.2,s=d.data.name+'  '+fmt(d.value);return s.length>w?s.slice(0,Math.max(1,w-1))+'…':s})
+   .style('font-weight',d=>d.children?600:400).style('fill',d=>d.children?'#fff':'#1a1c20');
+ }else{
+  const R=Math.min(W,H)/2-4,depth=root.height;
+  d3.partition().size([2*Math.PI,depth+1])(root);
+  const r=d3.scaleSqrt([0,depth+1],[0,R]),arc=d3.arc().startAngle(d=>d.x0).endAngle(d=>d.x1).padAngle(d=>Math.min((d.x1-d.x0)/2,.004)).padRadius(R/2)
+   .innerRadius(d=>r(d.y0)).outerRadius(d=>r(d.y1)-1);
+  const g=svg.append('g').attr('class','sb').attr('transform',`translate(${W/2},${H/2})`);
+  g.selectAll('path').data(root.descendants().slice(1).filter(d=>d.x1-d.x0>.002)).join('path').attr('d',arc).attr('fill',color)
+   .on('mousemove',(e,d)=>showTip(e,tipHtml(d.data,total))).on('mouseleave',hideTip).on('click',onClick);
+  g.selectAll('text.l').data(root.descendants().slice(1).filter(d=>(d.x1-d.x0)*(r(d.y0)+r(d.y1))/2>34&&r(d.y1)-r(d.y0)>22)).join('text')
+   .attr('transform',d=>{const a=(d.x0+d.x1)/2*180/Math.PI,rr=(r(d.y0)+r(d.y1))/2;return `rotate(${a-90}) translate(${rr},0) rotate(${a<180?0:180})`})
+   .attr('text-anchor','middle').attr('dy','.35em').style('fill','#1a1c20').text(d=>{const n=d.data.name,m=Math.floor((r(d.y1)-r(d.y0))/6.5);return n.length>m?n.slice(0,m-1)+'…':n});
+  const up=f!==S.status.root,c=g.append('g').style('cursor',up?'pointer':'default').on('click',()=>up&&setFocus(upOf(f)));
+  c.append('circle').attr('r',r(1)-2).attr('fill','var(--panel2)');
+  c.append('text').attr('text-anchor','middle').attr('dy','-.3em').style('fill','var(--fg)').style('font-size','16px').style('font-weight',700).text(fmt(data.size));
+  c.append('text').attr('text-anchor','middle').attr('dy','1.2em').style('fill','var(--mut)').text(up?'⤴ up':plural(data.n,'file'));
+ }
+ panel(data);
+}catch(e){fail(e)}}
+
+function panel(data){const s=S.sel,el=$('#panel');if(!el)return;
+ const box=(d,title)=>`<h3>${title}</h3>${d.kind==='file'&&THUMBABLE.has(d.type)?`<img src="${thumbUrl(d.path,400)}" alt="" style="width:100%;border-radius:8px;margin-bottom:8px" onerror="this.remove()">`:''}<div class="big">${fmt(d.size)}</div><div class="path sm" style="margin:4px 0 8px">${esc(short(d.path))}${d.kind==='other'||d.kind==='small'?' · '+esc(d.name):''}</div>
+  ${d.n!=null&&d.kind==='dir'?`<div class="row"><span class="mut">Files</span><span>${num(d.n)}</span></div>`:''}
+  ${d.mtime?`<div class="row"><span class="mut">Modified</span><span>${age(d.mtime)}</span></div>`:''}
+  ${d.type!=null?`<div class="row"><span class="mut">Type</span><span>${S.status.types[d.type]}</span></div>`:''}
+  <div class="row"><span class="mut">Share of this view</span><span>${(d.size/(data.size||1)*100).toFixed(1)}%</span></div>
+  ${(d.kind==='dir'||d.kind==='file')&&d.path!==S.status.root?`<div class="actions"><button class="btn" data-rv="${esc(d.path)}">Finder</button>${d.kind==='dir'?`<button class="btn" data-ex="${esc(d.path)}">Open in explorer</button>`:`<button class="btn" data-open="${esc(d.path)}">Open</button>`}
+  <button class="btn danger" data-del="${esc(d.path)}" data-size="${d.size}" ${PEND.has(d.path)?'disabled':''}>Delete…</button></div>`:''}`;
+ el.innerHTML=(s?box(s,'Selected item')+'<hr style="border:0;border-top:1px solid var(--line);margin:16px 0">':'')+box({...data,kind:'dir'},'This folder')+
+  `<p class="mut sm" style="margin-top:16px">Click a folder to enter it. Click a file to select it. Colors follow the top-level folder.</p>
+  <h3 style="margin-top:14px">Contents</h3><div class="bars">${(data.children||[]).slice(0,14).map(k=>`<div class="r" style="grid-template-columns:1fr 70px" ${k.kind==='dir'?`data-go="${esc(k.path)}"`:''}><span class="n">${esc(k.name)}</span><span>${fmt(k.size)}</span></div>`).join('')}</div>`}
+
+// ---------- charts ----------
+const CHARTS=[['pack','Circle packing'],['icicle','Icicle'],['ext','Extensions'],['hist','Size distribution'],['time','Timeline']];
+let chartKind=store.get('chart','pack'),chartMetric='size';
+async function charts(){const rv=RV;
+ $('#main').innerHTML=`<div class="bar"><div class="seg">${CHARTS.map(([k,n])=>`<button data-chart="${k}" class="${k===chartKind?'on':''}">${n}</button>`).join('')}</div>
+ ${['ext','hist'].includes(chartKind)?`<div class="seg"><button data-metric="size" class="${chartMetric==='size'?'on':''}">Size</button><button data-metric="n" class="${chartMetric==='n'?'on':''}">File count</button></div>`:''}
+ <span class="mut sm">${['ext','hist','time'].includes(chartKind)?'Whole scan: '+esc(short(S.status.root)):'Focus: '+esc(short(S.focus))+' — click a folder to enter it'}</span></div>
+ <div class="card" id="cstage" style="height:calc(100vh - 170px);min-height:420px;padding:10px"></div>`;
+ const el=$('#cstage');el.innerHTML=spinner();
+ try{const W=el.clientWidth-20,H=el.clientHeight-20;
+ if(chartKind==='pack'||chartKind==='icicle'){
+  const data=await get(`/api/tree?path=${q(S.focus)}&depth=3&top=20`);if(stale(rv))return;el.innerHTML='';
+  const root=d3.hierarchy(data).sum(d=>d.children&&d.children.length?0:Math.max(d.size,0)).sort((a,b)=>b.value-a.value);
+  const color=branchColor(root),svg=d3.select(el).append('svg').attr('viewBox',`0 0 ${W} ${H}`).style('width','100%').style('height','100%'),total=data.size||1;
+  const click=(e,d)=>{if(d.data.kind==='dir'&&d.depth>0)setFocus(d.data.path)};
+  if(chartKind==='pack'){
+   d3.pack().size([W,H]).padding(d=>d.depth?3:6)(root);
+   const n=svg.append('g').attr('class','pk').selectAll('g').data(root.descendants().slice(1)).join('g').attr('transform',d=>`translate(${d.x},${d.y})`);
+   n.append('circle').attr('r',d=>d.r).attr('fill',d=>d.children?d3.color(color(d)).copy({opacity:.14})+'':color(d)).attr('stroke',d=>d.children?color(d):'none').attr('stroke-opacity',.6)
+    .on('mousemove',(e,d)=>showTip(e,tipHtml(d.data,total))).on('mouseleave',hideTip).on('click',click);
+   n.filter(d=>!d.children&&d.r>22).append('text').attr('text-anchor','middle').attr('dy','.35em').style('fill','#1a1c20').style('font-size',d=>Math.min(13,d.r/4)+'px')
+    .text(d=>{const m=Math.floor(d.r/3.4);return d.data.name.length>m?d.data.name.slice(0,m-1)+'…':d.data.name});
+   n.filter(d=>d.children&&d.depth===1&&d.r>40).append('text').attr('text-anchor','middle').attr('y',d=>-d.r+14).style('fill','var(--fg)').style('font-weight',600).text(d=>d.data.name+' · '+fmt(d.value));
+  }else{
+   d3.partition().size([H,W]).padding(1)(root);
+   const n=svg.append('g').attr('class','ic').selectAll('g').data(root.descendants()).join('g').attr('transform',d=>`translate(${d.y0},${d.x0})`);
+   n.append('rect').attr('width',d=>d.y1-d.y0-1).attr('height',d=>Math.max(0,d.x1-d.x0-1)).attr('rx',3).attr('fill',d=>d.depth?color(d):'#3a3f4b')
+    .on('mousemove',(e,d)=>showTip(e,tipHtml(d.data,total))).on('mouseleave',hideTip).on('click',(e,d)=>d.depth?click(e,d):(S.focus!==S.status.root&&setFocus(upOf(S.focus))));
+   n.filter(d=>d.x1-d.x0>15).append('text').attr('x',6).attr('y',13).style('fill',d=>d.depth?'#1a1c20':'#fff')
+    .text(d=>{const w=(d.y1-d.y0-10)/6.4,s=(d.depth?d.data.name:short(d.data.path))+'  '+fmt(d.value);return s.length>w?s.slice(0,Math.max(1,w-1))+'…':s});
+  }
+ }else{
+  const c=await get('/api/charts');if(stale(rv))return;el.innerHTML='';
+  const svg=d3.select(el).append('svg').attr('viewBox',`0 0 ${W} ${H}`).style('width','100%').style('height','100%');
+  const M={t:16,r:20,b:40,l:chartKind==='ext'?110:70};
+  if(chartKind==='ext'){
+   const d=c.ext.slice(0,30),y=d3.scaleBand(d.map(x=>x.ext),[M.t,H-M.b]).padding(.18),x=d3.scaleLinear([0,d3.max(d,v=>v[chartMetric])],[M.l,W-M.r-70]);
+   svg.append('g').attr('class','axis').attr('transform',`translate(${M.l},0)`).call(d3.axisLeft(y).tickSize(0)).call(g=>g.select('.domain').remove()).selectAll('text').style('font-size','12px');
+   svg.append('g').attr('class','axis').attr('transform',`translate(0,${H-M.b})`).call(d3.axisBottom(x).ticks(6).tickFormat(v=>chartMetric==='size'?fmt(v):d3.format('~s')(v)));
+   svg.selectAll('rect.b').data(d).join('rect').attr('x',M.l).attr('y',v=>y(v.ext)).attr('height',y.bandwidth()).attr('width',v=>Math.max(1,x(v[chartMetric])-M.l)).attr('rx',3).attr('fill',v=>TYPE_COL[v.type])
+    .on('mousemove',(e,v)=>showTip(e,`<b>.${esc(v.ext)}</b> · ${S.status.types[v.type]}<br>${fmt(v.size)} · ${plural(v.n,'file')}`)).on('mouseleave',hideTip);
+   svg.selectAll('text.v').data(d).join('text').attr('x',v=>x(v[chartMetric])+5).attr('y',v=>y(v.ext)+y.bandwidth()/2).attr('dy','.35em').style('fill','var(--mut)').text(v=>chartMetric==='size'?fmt(v.size):num(v.n));
+  }else if(chartKind==='hist'){
+   const d=c.sizes,lab=v=>v.hi<=1024?'< 1 KB':`${fmt(v.lo)}–${fmt(v.hi)}`.replace(/\.0 /g,' '),x=d3.scaleBand(d.map(lab),[M.l,W-M.r]).padding(.12),y=d3.scaleLinear([0,d3.max(d,v=>v[chartMetric])],[H-M.b,M.t]).nice();
+   const col=d3.scaleSequential([0,d.length-1],d3.interpolateRgbBasis([PAL[1],PAL[2],PAL[4],PAL[0]]));
+   svg.append('g').attr('class','axis').attr('transform',`translate(0,${H-M.b})`).call(d3.axisBottom(x).tickValues(x.domain().filter((_,i)=>i%2===0))).selectAll('text').style('font-size','10px');
+   svg.append('g').attr('class','axis').attr('transform',`translate(${M.l},0)`).call(d3.axisLeft(y).ticks(6).tickFormat(v=>chartMetric==='size'?fmt(v):d3.format('~s')(v)));
+   svg.selectAll('rect.b').data(d).join('rect').attr('x',v=>x(lab(v))).attr('width',x.bandwidth()).attr('y',v=>y(v[chartMetric])).attr('height',v=>H-M.b-y(v[chartMetric])).attr('rx',3).attr('fill',(v,i)=>col(i))
+    .on('mousemove',(e,v)=>showTip(e,`<b>${lab(v)}</b><br>${plural(v.n,'file')} · ${fmt(v.size)}`)).on('mouseleave',hideTip);
+  }else{
+   const d=c.months.map(v=>({date:d3.timeParse('%Y-%m')(v.m),size:v.size})).filter(v=>v.date>=d3.timeYear.offset(new Date(),-12));
+   const x=d3.scaleTime(d3.extent(d,v=>v.date),[M.l,W-M.r]),y=d3.scaleSqrt([0,d3.max(d,v=>v.size)],[H-M.b,M.t]).nice();
+   const gid='g'+Math.random().toString(36).slice(2);const gr=svg.append('defs').append('linearGradient').attr('id',gid).attr('x1',0).attr('y1',0).attr('x2',0).attr('y2',1);
+   gr.append('stop').attr('offset','0%').attr('stop-color',PAL[0]).attr('stop-opacity',.75);gr.append('stop').attr('offset','100%').attr('stop-color',PAL[1]).attr('stop-opacity',.05);
+   svg.append('g').attr('class','axis').attr('transform',`translate(0,${H-M.b})`).call(d3.axisBottom(x).ticks(10));
+   svg.append('g').attr('class','axis').attr('transform',`translate(${M.l},0)`).call(d3.axisLeft(y).ticks(6).tickFormat(fmt));
+   svg.append('path').datum(d).attr('fill',`url(#${gid})`).attr('d',d3.area().x(v=>x(v.date)).y0(H-M.b).y1(v=>y(v.size)).curve(d3.curveMonotoneX));
+   svg.append('path').datum(d).attr('fill','none').attr('stroke',PAL[0]).attr('stroke-width',2).attr('d',d3.line().x(v=>x(v.date)).y(v=>y(v.size)).curve(d3.curveMonotoneX));
+   const dot=svg.append('circle').attr('r',4).attr('fill',PAL[0]).style('display','none'),bis=d3.bisector(v=>v.date).center;
+   svg.append('rect').attr('x',M.l).attr('y',M.t).attr('width',W-M.l-M.r).attr('height',H-M.t-M.b).attr('fill','transparent')
+    .on('mousemove',e=>{const [mx]=d3.pointer(e),v=d[bis(d,x.invert(mx))];if(!v)return;dot.style('display',null).attr('cx',x(v.date)).attr('cy',y(v.size));showTip(e,`<b>${d3.timeFormat('%B %Y')(v.date)}</b><br>${fmt(v.size)} changed/added`)})
+    .on('mouseleave',()=>{dot.style('display','none');hideTip()});
+   svg.append('text').attr('x',M.l+6).attr('y',M.t+12).style('fill','var(--mut)').text('Last 12 years · size of files modified per month (square-root scale)');
+  }
+ }}catch(e){el.innerHTML=`<div class="spin">Error: ${esc(e.message)}</div>`}}
+
+// ---------- file explorer ----------
+const EX=Object.assign({view:'list',sort:'size',dir:-1,types:[],min:0,ph:180},store.get('ex',{}),{filter:'',search:null,typed:null});
+const saveEX=()=>store.set('ex',{view:EX.view,sort:EX.sort,dir:EX.dir,types:EX.types,min:EX.min,ph:EX.ph});
+const ftypes=()=>EX.types.filter(t=>t!=='d');
+const MINS=[[0,'All sizes'],[1<<20,'≥ 1 MB'],[10<<20,'≥ 10 MB'],[100<<20,'≥ 100 MB'],[1<<30,'≥ 1 GB']];
+function exRows(rows){let r=rows;
+ if(EX.filter){const f=EX.filter.toLowerCase();r=r.filter(x=>x.name.toLowerCase().includes(f))}
+ if(EX.types.length)r=r.filter(x=>x.kind==='dir'?EX.types.includes('d'):EX.types.includes(x.type));
+ if(EX.min)r=r.filter(x=>x.kind==='dir'||x.size>=EX.min);
+ if(EX.view==='photo')r=r.filter(x=>x.kind==='file'&&MEDIA.has(x.type));
+ const k=EX.sort,dir=EX.dir;
+ return [...r].sort((a,b)=>{const v=k==='name'?a.name.localeCompare(b.name,'en'):k==='mtime'?a.mtime-b.mtime:k==='type'?(a.type??-1)-(b.type??-1):a.size-b.size;return v*dir})}
+async function explorer(){const rv=RV;
+ $('#main').innerHTML=`<div class="bar">
+  <input id="exq" type="search" placeholder="Filter this folder · Enter = search subfolders" value="${esc(EX.search?EX.search.q:EX.filter)}" style="flex:1;min-width:220px" aria-label="Search">
+  <div class="seg">${[['list','☰ List'],['grid','▦ Grid'],['photo','🖼 Photos']].map(([k,n])=>`<button data-view="${k}" class="${EX.view===k?'on':''}">${n}</button>`).join('')}</div>
+  <select id="exsort" aria-label="Sort by">${[['size','Size'],['name','Name'],['mtime','Date'],['type','Type']].map(([k,n])=>`<option value="${k}" ${EX.sort===k?'selected':''}>${n}</option>`).join('')}</select>
+  <button class="btn sm" id="exdir" title="Sort direction">${EX.dir<0?'↓ desc':'↑ asc'}</button>
+  <select id="exmin" aria-label="Minimum size">${MINS.map(([v,n])=>`<option value="${v}" ${EX.min==v?'selected':''}>${n}</option>`).join('')}</select>
+  ${EX.view==='photo'?`<input type="range" id="exph" min="100" max="360" value="${EX.ph}" aria-label="Thumbnail size">`:''}</div>
+  <div class="chips" style="margin-bottom:12px"><button class="chip ${EX.types.includes('d')?'on':''}" data-ft="d">📁 Folders</button>${S.status.types.map((t,i)=>`<button class="chip ${EX.types.includes(i)?'on':''}" data-ft="${i}" style="${EX.types.includes(i)?'color:'+TYPE_COL[i]:''}"><b style="background:${TYPE_COL[i]}"></b>${t}</button>`).join('')}${EX.types.length?'<button class="chip" data-ft="clear">✕ clear filter</button>':''}</div>
+  <div id="exbody">${spinner()}</div>`;
+ const qi=$('#exq');qi.oninput=()=>{EX.filter=qi.value;if(EX.search&&!qi.value){EX.search=null}if(!EX.search)drawEx()};
+ qi.onkeydown=async e=>{if(e.key==='Enter'&&qi.value.trim().length>=2){$('#exbody').innerHTML=spinner('Searching…');try{EX.search={q:qi.value.trim(),rows:await api(`/api/search?q=${q(qi.value.trim())}&path=${q(S.focus)}`)};EX.filter='';drawEx()}catch(er){toast('Error: '+er.message)}}};
+ $('#exsort').onchange=e=>{EX.sort=e.target.value;saveEX();drawEx()};$('#exdir').onclick=()=>{EX.dir*=-1;saveEX();explorer()};
+ $('#exmin').onchange=e=>{EX.min=+e.target.value;saveEX();drawEx()};
+ if($('#exph'))$('#exph').oninput=e=>{EX.ph=+e.target.value;saveEX();document.querySelector('.photos')?.style.setProperty('--ph',EX.ph+'px')};
+ if(EX.search)return drawEx();
+ // a file-type filter searches the whole subtree (from the scan), not just this folder
+ const ts=ftypes(),inTree=inView(S.focus);
+ try{const [b,t]=await Promise.all([get('/api/ls?path='+q(S.focus)),ts.length&&inTree?get(`/api/typed?path=${q(S.focus)}&types=${ts.join(',')}`).catch(()=>null):null]);
+  if(stale(rv))return;EX.base=b;EX.typed=t;drawEx()}catch(e){$('#exbody').innerHTML=`<div class="spin">Error: ${esc(e.message)}</div>`}}
+function exSource(){if(EX.search)return EX.search.rows;const base=EX.base?.rows||[];if(!EX.typed)return base;
+ const seen=new Set(EX.typed.files.map(f=>f.path));  // + this folder's own small files, which the scan doesn't list one by one
+ return [...EX.typed.files,...base.filter(r=>r.kind==='dir'||!seen.has(r.path))]}
+function drawEx(){const el=$('#exbody');if(!el)return;
+ const src=exSource(),rows=exRows(src),ty=!EX.search&&EX.typed;scope('ex',rows);const max=d3.max(rows,r=>r.size)||1;
+ const tnames=ftypes().map(i=>S.status.types[i]).join(', ');
+ const info=EX.search?`<b>“${esc(EX.search.q)}”</b> · ${plural(rows.length,'result')} (subfolders included) <a data-clearsearch>✕ close search</a>`
+  :ty?`<b>${esc(tnames)}</b> in ${esc(short(S.focus))} and all subfolders · ${fmt(ty.total)} total · ${plural(ty.count,'file')} ≥ 1 MB listed${ty.small>0?` · ~${fmt(ty.small)} in smaller files`:''}`
+  :`${num(rows.length)} / ${plural(src.length,'item')} · ${fmt(d3.sum(rows,r=>Math.max(0,r.size)))}${EX.base&&!EX.base.scanned?' · this folder is not scanned, folder sizes unknown':ftypes().length?' · only this folder (outside the scanned tree)':''}`;
+ let where='';
+ if(ty&&ty.by.length){const by=ty.by.slice(0,12),mx=by[0].size,one=ftypes().length===1?TYPE_COL[ftypes()[0]]:null;
+  where=`<div class="card" style="margin-bottom:12px"><h3>Where it is · by subfolder</h3><div class="bars">${by.map((b,i)=>`<div class="r" data-go="${esc(b.path)}" title="${esc(b.path)}"><span class="n">📁 ${esc(b.name)}</span><span class="t"><i style="width:${b.size/mx*100}%;background:${one||PAL[i%PAL.length]}"></i></span><span>${fmt(b.size)}</span></div>`).join('')}${ty.by.length>12?`<div class="mut sm">+${ty.by.length-12} more folders</div>`:''}</div></div>`}
+ let body;
+ if(!rows.length)body=`<div class="spin">${EX.view==='photo'?'No photos/videos here. <a data-view="list">Switch to List view</a> to see other file types.':'No matching items.'}</div>`;
+ else if(EX.view==='list')body=fileTable('ex',rows,{path:!!EX.search,rel:ty?S.focus:null,sortable:true});
+ else if(EX.view==='grid')body=`<div class="tiles">${rows.slice(0,1500).map(r=>`<div class="tile" data-tile="${esc(r.path)}" title="${esc(short(r.path))}" style="${PEND.has(r.path)?'opacity:.4':''}">${cbox(r.path,'ex')}
+  <div class="ic">${r.kind==='dir'?'📁':THUMBABLE.has(r.type)?`<img loading="lazy" src="${thumbUrl(r.path,240)}" alt="" onerror="this.outerHTML='${TYPE_ICO[r.type]}'">`:`<span style="color:${TYPE_COL[r.type]}">${TYPE_ICO[r.type]}</span>`}</div>
+  <div class="nm">${esc(r.name)}</div><div class="mt"><span>${fmt(r.size)}</span><span>${r.kind==='dir'&&r.n!=null?plural(r.n,'file'):age(r.mtime)}</span></div>
+  <div class="meter" style="height:3px"><i style="width:${Math.max(0,r.size)/max*100}%"></i></div></div>`).join('')}</div>`;
+ else{const dirs=(EX.search||ty?[]:(EX.base?.rows||[]).filter(r=>r.kind==='dir').slice(0,40));
+  body=(dirs.length?`<div class="chips" style="margin-bottom:12px">${dirs.map(d=>`<button class="chip" data-go="${esc(d.path)}">📁 ${esc(d.name)} <span class="mut">${fmt(d.size)}</span></button>`).join('')}</div>`:'')+
+  `<div class="photos" style="--ph:${EX.ph}px">${rows.slice(0,800).map(r=>`<div class="ph" data-lb="${esc(r.path)}" data-sc="ex" title="${esc(short(r.path))}" style="${PEND.has(r.path)?'opacity:.4':''}">${cbox(r.path,'ex')}<img loading="lazy" src="${thumbUrl(r.path,Math.min(480,EX.ph*2))}" alt="${esc(r.name)}" onerror="this.style.opacity=0">${r.type===0?'<span class="vid">▶</span>':''}<div class="cap"><span>${esc(r.name)}</span><span>${fmt(r.size)}</span></div></div>`).join('')}</div>`}
+ el.innerHTML=selBar('ex','trash',`<span class="mut sm">${info}</span>`)+where+body;upd('ex')}
+function fileTable(id,rows,o={}){const max=d3.max(rows,r=>r.size)||1,ar=k=>EX.sort===k?(EX.dir<0?' ↓':' ↑'):'',rel=o.rel&&o.rel.replace(/\/$/,'')+'/';
+ const th=(k,n,st='')=>o.sortable?`<th data-sort="${k}" ${st}>${n}${ar(k)}</th>`:`<th ${st}>${n}</th>`;
+ const nm=r=>esc(rel&&r.path.startsWith(rel)?r.path.slice(rel.length):o.path?short(r.path):(r.name||r.path.split('/').pop()));
+ return `<div class="card" style="padding:0;overflow:auto"><table><thead><tr><th style="width:28px"><input type=checkbox data-all="${id}" aria-label="Select all"></th>${th('name',rel?'Path':'Name')}${th('type','Type')}${th('mtime','Modified')}${th('size','Size','style="text-align:right"')}<th></th></tr></thead><tbody>`+
+ rows.slice(0,3000).map(r=>`<tr ${pend(r.path)}><td>${cbox(r.path,id)}</td>
+  <td class="path">${r.kind==='dir'?`📁 <a data-go="${esc(r.path)}">${nm(r)}</a>`:`<span style="color:${TYPE_COL[r.type]??'#6b7280'}">●</span> ${MEDIA.has(r.type)?`<a data-lb="${esc(r.path)}" data-sc="${id}">${nm(r)}</a>`:nm(r)}`}${r.n!=null&&r.kind==='dir'?` <span class="mut sm">· ${plural(r.n,'file')}</span>`:''}</td>
+  <td class="sm mut">${r.kind==='dir'?'Folder':S.status.types[r.type]??''}</td><td class="sm mut" style="white-space:nowrap">${r.mtime?age(r.mtime):''}</td>
+  <td class="sz"><b style="width:${Math.max(0,r.size)/max*100}%"></b><span>${fmt(r.size)}</span></td>
+  <td class="sm" style="white-space:nowrap"><a data-ex="${esc(r.kind==='dir'?r.path:r.path.replace(/\/[^/]*$/,''))}">open</a> · <a data-rv="${esc(r.path)}">Finder</a></td></tr>`).join('')+
+ `</tbody></table>${rows.length>3000?`<div class="spin">Showing the first 3000 items — filter or search to narrow down.</div>`:''}</div>`}
+
+// ---------- lightbox ----------
+let LB=null;
+function lightbox(path,sc){const list=(SC[sc]?.rows||[]).filter(r=>r.kind!=='dir'&&MEDIA.has(r.type));let i=Math.max(0,list.findIndex(r=>r.path===path));
+ const draw=()=>{const r=list[i]||{path,size:0};openModal(`<button class="btn x" data-close>✕</button><div class="lb"><div><img src="${thumbUrl(r.path,1400)}" alt="${esc(r.path)}"></div>
+  <div><h3 style="margin-top:0;word-break:break-all">${esc(r.path.split('/').pop())}</h3><div class="row"><span class="mut">Size</span><span>${fmt(r.size)}</span></div>
+  ${r.mtime?`<div class="row"><span class="mut">Modified</span><span>${age(r.mtime)}</span></div>`:''}<div class="path sm mut" style="margin:8px 0">${esc(short(r.path))}</div>
+  <div class="actions"><button class="btn" data-open="${esc(r.path)}">Open</button><button class="btn" data-rv="${esc(r.path)}">Finder</button><button class="btn danger" data-del="${esc(r.path)}" data-size="${r.size}" ${PEND.has(r.path)?'disabled':''}>Delete…</button></div>
+  <div class="actions"><button class="btn" data-lbn="-1" ${i<=0?'disabled':''}>← Previous</button><button class="btn" data-lbn="1" ${i>=list.length-1?'disabled':''}>Next →</button></div><p class="mut sm">${i+1} / ${list.length} · ← → keys</p></div></div>`);LB={step:d=>{i=Math.min(list.length-1,Math.max(0,i+d));draw()}}};
+ draw()}
+function openModal(html){$('#modal').innerHTML=`<div class="modal" data-backdrop><div class="box" role="dialog" aria-modal="true">${html}</div></div>`;LB=null}
+function closeModal(){$('#modal').innerHTML='';LB=null}
+addEventListener('keydown',e=>{if(!$('#modal').innerHTML)return;if(e.key==='Escape')closeModal();if(LB&&e.key==='ArrowRight')LB.step(1);if(LB&&e.key==='ArrowLeft')LB.step(-1)});
+
+// ---------- large files ----------
+let bigMin=500;
+async function big(){const rv=RV;loading();try{
+ const rows=await api('/api/big?min='+bigMin);if(stale(rv))return;scope('big',rows);
+ $('#main').innerHTML=selBar('big','trash',`<label class="mut">At least <input type=number id=min value=${bigMin} min=1 style="width:90px"> MB</label><span class="mut sm">${plural(rows.length,'file')} · ${fmt(d3.sum(rows,r=>r.size))}</span>`)+fileTable('big',rows,{path:true});
+ $('#min').onchange=e=>{bigMin=+e.target.value||500;big()};upd('big')}catch(e){fail(e)}}
+
+// ---------- suggestions ----------
+const KIND={dev:'Dev artifacts',downloads:'Downloads',duplicate:'Duplicate files',xcode:'Xcode',cache:'Large caches',trash:'Trash',backup:'iPhone backups',mail:'Mail attachments',old:'Old large files',info:'Info (manual steps)'};
+const CONF_EN={high:'high confidence',medium:'medium confidence',low:'review'};
+async function suggest(){$('#crumb').innerHTML='<span class="mut">Suggestions · items that look safe to delete</span>';loading('Preparing suggestions (duplicates, stale projects…) ~20 s');try{
+ const rv=RV,all=await get('/api/suggest');if(stale(rv))return;const rows=all.filter(x=>x.action!=='info'),info=all.filter(x=>x.action==='info');scope('sug',rows);
+ const tot=c=>d3.sum(rows.filter(x=>x.confidence===c&&!PEND.has(x.path)),x=>x.size);
+ const byKind=d3.groups(rows,x=>x.kind).sort((a,b)=>d3.sum(b[1],x=>x.size)-d3.sum(a[1],x=>x.size));
+ $('#main').innerHTML=`<div class="grid" style="margin-bottom:14px">
+  ${['high','medium','low'].map(c=>`<div class="card kpi c4"><h3>${CONF_EN[c]}</h3><div class="v ${c}">${fmt(tot(c))}</div><div class="s">${plural(rows.filter(x=>x.confidence===c).length,'suggestion')} · <a data-pick="${c}">select all</a></div></div>`).join('')}</div>
+  ${selBar('sug','trash','<button class="btn" data-pick="high">Select high confidence</button><button class="btn" id="sugrf">Refresh</button>')}
+  ${rows.length?`<div class="card" style="padding:0;overflow:auto"><table>${byKind.map(([k,list])=>`<tr class="grp"><td style="width:28px"><input type=checkbox data-kind="${k}" aria-label="Select group"></td><td colspan=3>${KIND[k]||k} <span class="mut">· ${plural(list.length,'item')} · ${fmt(d3.sum(list,x=>x.size))}</span></td></tr>`+
+   list.map(x=>`<tr ${pend(x.path)}><td>${cbox(x.path,'sug')}</td><td class="path">${esc(short(x.path))} <span class="tag ${x.confidence}">${CONF_EN[x.confidence]}</span><div class="mut sm">${esc(x.title)} — ${esc(x.reason)}</div></td>
+    <td class="sz"><span>${fmt(x.size)}</span></td><td class="sm" style="white-space:nowrap"><a data-ex="${esc(x.path.replace(/\/[^/]*$/,''))}">open</a> · <a data-rv="${esc(x.path)}">Finder</a>${x.keep?` · <a data-rv="${esc(x.keep)}" title="Copy that will be kept">its copy</a>`:''}</td></tr>`).join('')).join('')}</table></div>`:'<div class="card spin">Nothing to suggest right now 🎉</div>'}
+  ${info.length?`<div class="card" style="margin-top:14px"><h3>Manual steps</h3>${info.map(x=>`<div class="row"><span><b>${esc(x.title)}</b> · ${fmt(x.size)}<br><span class="mut sm">${esc(x.reason)}</span></span><a data-rv="${esc(x.path)}">Finder</a></div>`).join('')}</div>`:''}`;
+ $('#sugrf').onclick=()=>{cache={};suggest()};upd('sug')}catch(e){fail(e)}}
+
+// ---------- cleanup rules ----------
+let META=null;
+const RISK=r=>r==='safe'?'safe':'re-downloaded';
+async function clean(){$('#crumb').innerHTML='<span class="mut">Cleanup rules · includes the mac-cleanup rules</span>';loading('Checking rules… ~10 s');try{
+ const rv=RV,[meta,items]=await Promise.all([api('/api/clean/meta'),get('/api/clean/items')]);if(stale(rv))return;META=meta;scope('cl',items);
+ const auto=new Set(meta.conf.auto.groups);
+ const byG=meta.groups.map(g=>[g,items.filter(i=>i.group===g.id)]).filter(([,l])=>l.length);
+ $('#main').innerHTML=(meta.browsers_running.length?`<div class="warn">${esc(meta.browsers_running.join(', '))} open — their caches will be skipped. Quit and try again to clean them.</div>`:'')+
+ `<div class="grid" style="margin-bottom:14px"><div class="card kpi c4"><h3>Found</h3><div class="v">${fmt(d3.sum(items,i=>i.size||0))}</div><div class="s">${plural(items.length,'item')} · ${plural(byG.length,'rule group')}</div></div>
+  <div class="card kpi c4"><h3>Covered by auto-clean</h3><div class="v safe">${fmt(d3.sum(items.filter(i=>auto.has(i.group)),i=>i.size||0))}</div><div class="s">${plural(auto.size,'group')} enabled · <a data-t="settings">edit</a></div></div>
+  <div class="card kpi c4"><h3>Auto-clean</h3><div class="s" style="margin:4px 0 8px">${meta.conf.auto.schedule==='off'?'Schedule off':`${PER[meta.conf.auto.schedule]} ${String(meta.conf.auto.hour).padStart(2,'0')}:00 ${meta.schedule_active?'· active':'· not running'}`}</div><button class="btn pri" data-autorun>Run now…</button></div></div>
+ ${selBar('cl','rm','<button class="btn" data-pickauto>Select auto-clean groups</button><button class="btn" id="clrf">Rescan</button>')}
+ <div class="card" style="padding:0;overflow:auto"><table>${byG.map(([g,l])=>`<tr class="grp"><td style="width:28px"><input type=checkbox data-group="${g.id}" aria-label="Select group"></td><td colspan=3>${esc(g.name)} <span class="tag ${g.risk}">${RISK(g.risk)}</span>${auto.has(g.id)?' <span class="tag safe">auto</span>':''} <span class="mut">· ${plural(l.length,'item')} · ${fmt(d3.sum(l,i=>i.size||0))}</span><div class="mut sm" style="font-weight:400">${esc(g.desc)}</div></td></tr>`+
+  l.slice(0,200).map(i=>`<tr ${pend(i.path)}><td>${cbox(i.path,'cl')}</td><td class="path">${esc(short(i.path))}${i.action==='contents'?' <span class="mut sm">(contents)</span>':''}${i.action==='cmd'?` <span class="mut sm">(command: ${esc(i.cmd.slice(1).join(' '))})</span>`:''}<div class="mut sm">${esc(i.note)}</div></td>
+   <td class="sz"><span>${fmt(i.size)}</span></td><td class="sm"><a data-rv="${esc(i.path)}">Finder</a></td></tr>`).join('')+(l.length>200?`<tr><td></td><td colspan=3 class="mut sm">+${l.length-200} more (the group checkbox selects all)</td></tr>`:'')).join('')}</table></div>`;
+ $('#clrf').onclick=()=>{delete cache['/api/clean/items'];clean()};upd('cl')}catch(e){fail(e)}}
+
+// ---------- docker ----------
+const DK_DF={containers:'Containers',images:'Images',images_all:'Images',build:'Build Cache',volumes:'Local Volumes'};
+const DK_RISKY=new Set(['images_all','volumes']);
+async function docker(){$('#crumb').innerHTML='<span class="mut">Docker · prune unused data</span>';loading('Asking Docker…');try{
+ const rv=RV,d=await api('/api/docker');if(stale(rv))return;
+ const raw=d.raw?`<div class="card kpi c4"><h3>Docker Desktop disk image</h3><div class="v">${fmt(d.raw)}</div><div class="s">Docker.raw on your disk — shrinks after pruning over time</div></div>`:'';
+ if(!d.installed){$('#main').innerHTML=`<div class="card spin">Docker CLI not found. Install Docker Desktop, OrbStack or colima.</div>`;return}
+ if(!d.running){$('#main').innerHTML=`<div class="grid">${raw}<div class="card ${raw?'c8':'c12'}"><h3>Docker is not running</h3><p>Start Docker Desktop (or colima / OrbStack), then <a id="dkrf">refresh</a>.</p><p class="mut sm">${esc(d.error||'')}</p></div></div>`;$('#dkrf').onclick=docker;return}
+ const df=Object.fromEntries(d.df.map(x=>[x.type,x])),total=d3.sum(d.df,x=>x.reclaimable);
+ const est=id=>id==='images'?null:df[DK_DF[id]]?.reclaimable;
+ $('#main').innerHTML=`<div class="grid" style="margin-bottom:14px">
+  <div class="card kpi c4"><h3>Docker data</h3><div class="v">${fmt(d3.sum(d.df,x=>x.size))}</div><div class="s">images, containers, volumes, build cache</div></div>
+  <div class="card kpi c4"><h3>Reclaimable</h3><div class="v" style="color:var(--acc)">${fmt(total)}</div><div class="s">according to <code>docker system df</code></div></div>${raw}</div>
+  <div class="card" style="padding:0;overflow:auto;margin-bottom:14px"><table><thead><tr><th>Type</th><th>Total</th><th>In use</th><th style="text-align:right">Size</th><th style="text-align:right">Reclaimable</th></tr></thead><tbody>
+  ${d.df.map(x=>`<tr><td>${esc(x.type)}</td><td>${esc(x.count)}</td><td>${esc(x.active)}</td><td class="sz"><span>${fmt(x.size)}</span></td><td class="sz"><span>${fmt(x.reclaimable)}</span></td></tr>`).join('')}</tbody></table></div>
+  <div class="card"><h3>Prune</h3><div class="form">${d.actions.map(a=>`<label class="chk"><input type=checkbox name="dk" value="${a.id}" ${DK_RISKY.has(a.id)?'':'checked'}><span>${esc(a.label)} ${est(a.id)!=null?`<span class="mut">· ~${fmt(est(a.id))}</span>`:''} ${DK_RISKY.has(a.id)?'<span class="tag risky">careful</span>':''}<small>${esc(a.desc)} <code>${esc(a.cmd)}</code></small></span></label>`).join('')}</div>
+  <div class="bar" style="margin:14px 0 0"><button class="btn pri" id="dkrun">Prune selected</button><button class="btn" id="dkrf">Refresh</button><span class="mut sm">Runs in the background; containers that are running are never touched.</span></div></div>`;
+ $('#dkrf').onclick=docker;
+ $('#dkrun').onclick=async()=>{const ids=[...document.querySelectorAll('[name=dk]:checked')].map(i=>i.value);if(!ids.length)return toast('Select at least one item');
+  const names=d.actions.filter(a=>ids.includes(a.id)).map(a=>'• '+a.label+(DK_RISKY.has(a.id)?' (careful)':''));
+  if(!confirm('Docker will permanently remove:\n\n'+names.join('\n')))return;
+  try{const r=await post('/api/docker/run',{ids});trackJob(r.id)}catch(e){toast('Error: '+e.message)}};
+}catch(e){fail(e)}}
+
+// ---------- settings ----------
+async function settings(){$('#crumb').innerHTML='<span class="mut">Auto-clean & settings</span>';loading();try{
+ const rv=RV,m=await api('/api/clean/meta');if(stale(rv))return;const a=m.conf.auto,auto=new Set(a.groups),cp=a.chrome_profiles==='all'?null:new Set(a.chrome_profiles.map(pid));META=m;
+ $('#main').innerHTML=`<div class="grid">
+ <div class="card c6"><h3>What auto-clean removes</h3><div class="form">${m.groups.map(g=>`<label class="chk"><input type=checkbox name="grp" value="${g.id}" ${auto.has(g.id)?'checked':''}><span>${esc(g.name)} <span class="tag ${g.risk}">${RISK(g.risk)}</span><small>${esc(g.desc)}</small></span></label>`).join('')}</div></div>
+ <div class="c6" style="display:grid;gap:14px;align-content:start">
+  <div class="card"><h3>Schedule</h3><div class="form">
+   <label>How often<select id="sch">${Object.entries({off:'Off (manual only)',...PER}).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></label>
+   <label>Time<select id="hour">${d3.range(24).map(h=>`<option value="${h}" ${h==a.hour?'selected':''}>${String(h).padStart(2,'0')}:00</option>`).join('')}</select></label>
+   <label>Delete mode<select id="amode"><option value="rm">Delete permanently (space freed immediately)</option><option value="trash">Move to Trash</option></select></label>
+   <div class="mut sm">${m.scheduler==='launchd'?`Status: ${m.schedule_active?'<span class="safe">launchd job loaded</span>':'not loaded'} · If the Mac is asleep, it runs on wake.`
+    :m.scheduler==='built-in'?'<span class="safe">Runs inside the DiskMan service</span> · if it is down at that hour, that run is skipped.'
+    :'Runs only while DiskMan runs as a background service (install it as a service).'}${a.schedule!=='off'&&m.next_run?` · Next run: <b>${new Date(m.next_run*1000).toLocaleString('en-GB',{dateStyle:'medium',timeStyle:'short'})}</b>`:''}</div></div></div>
+  <div class="card"><h3>Dev artifacts</h3><div class="form">
+   <label>Minimum days since the project was last touched<input type=number id="devage" min=0 value="${a.dev_min_age_days}"></label>
+   <label>Folder names (comma separated)<textarea id="devnames" rows=3>${esc(a.dev_names.join(', '))}</textarea></label></div></div>
+  <div class="card"><h3>Custom rules</h3><div class="form"><label>Globs relative to home, one per line<textarea id="globs" rows=3 placeholder="Library/Caches/com.example.*&#10;Downloads/*.dmg">${esc(a.custom_globs.join('\n'))}</textarea></label></div></div>
+  <div class="card"><h3>Browsers</h3><div class="form">
+   ${m.service?'':`<label>Open DiskMan in<select id="bprof"><option value="">System default browser</option>${m.browsers.map(b=>`<option value="${b.id}">${esc(b.name)}</option>`+m.profiles.filter(p=>p.browser===b.id&&b.id!=='firefox').map(p=>`<option value="${esc(p.id)}">${esc(b.name)} · ${esc(p.name)}</option>`).join('')).join('')}</select></label>`}
+   <div class="sm">Profiles whose caches get cleaned</div><div class="chips"><button class="chip ${cp?'':'on'}" data-cpall>All</button>${m.profiles.map(p=>`<button class="chip ${cp&&cp.has(p.id)?'on':''}" data-cp="${esc(p.id)}">${esc(p.bname)} · ${esc(p.name)}</button>`).join('')}</div>
+   ${m.profiles.length?'':'<div class="mut sm">No Chrome, Edge, Brave, Chromium, Vivaldi or Firefox profiles found here.</div>'}
+   ${m.browsers_running.length?`<div class="mut sm">${esc(m.browsers_running.join(', '))} open — their caches are skipped while open.</div>`:''}</div></div>
+  <div class="card"><h3>Remote access</h3><form class="form" id="pwf">
+   <div class="mut sm">${m.conf.auth_user?`Other devices log in as <b>${esc(m.conf.auth_user)}</b>. Change it here:`:'No password yet: other devices cannot open DiskMan.'}</div>
+   <label>Username<input name="user" autocomplete="username" required value="${esc(m.conf.auth_user||'admin')}"></label>
+   <label>New password<input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+   <div><button class="btn">Save login</button>${m.conf.auth_user&&!['127.0.0.1','localhost','[::1]'].includes(location.hostname)?' <button class="btn" type="button" id="logout">Log out</button>':''}</div></form></div>
+ </div>
+ <div class="card c12"><div class="bar" style="margin:0"><button class="btn pri" id="save">Save</button><button class="btn" id="prev">Preview (what gets deleted?)</button><button class="btn danger" data-autorun>Run now…</button><span class="mut sm" id="savemsg"></span></div><div id="prevbox"></div></div>
+ <div class="card c12"><h3>History</h3>${m.history.length?`<table><tr><th>Date</th><th>Source</th><th>Items</th><th>Space freed</th><th>Estimated</th><th>Errors</th></tr>${m.history.map(h=>`<tr><td>${new Date(h.ts*1000).toLocaleString('en-GB')}</td><td>${h.source==='auto'?'auto':'manual'}</td><td>${h.items}</td><td><b>${fmt(h.freed)}</b></td><td class="mut">${fmt(h.estimated)}</td><td>${h.errors||''}</td></tr>`).join('')}</table>`:'<div class="mut">No cleanups yet.</div>'}</div></div>`;
+ $('#sch').value=a.schedule;$('#amode').value=a.mode;
+ const bp=m.conf.browser_profile||'';if($('#bprof'))$('#bprof').value=!bp||bp.includes(':')||m.browsers.some(b=>b.id===bp)?bp:'chrome:'+bp;
+ let cpSel=cp?new Set(cp):null;
+ document.querySelectorAll('[data-cp]').forEach(b=>b.onclick=()=>{cpSel??=new Set();cpSel.has(b.dataset.cp)?cpSel.delete(b.dataset.cp):cpSel.add(b.dataset.cp);if(!cpSel.size)cpSel=null;
+  b.classList.toggle('on');$('[data-cpall]').classList.toggle('on',!cpSel)});
+ $('[data-cpall]').onclick=()=>{cpSel=null;document.querySelectorAll('[data-cp]').forEach(b=>b.classList.remove('on'));$('[data-cpall]').classList.add('on')};
+ const body=()=>({browser_profile:$('#bprof')?.value??m.conf.browser_profile,auto:{groups:[...document.querySelectorAll('[name=grp]:checked')].map(i=>i.value),schedule:$('#sch').value,hour:+$('#hour').value,mode:$('#amode').value,
+  dev_min_age_days:+$('#devage').value||0,dev_names:$('#devnames').value.split(',').map(s=>s.trim()).filter(Boolean),custom_globs:$('#globs').value.split('\n').map(s=>s.trim()).filter(Boolean),chrome_profiles:cpSel?[...cpSel]:'all'}});
+ const save=async()=>{try{META=await post('/api/config',body());cache={};$('#savemsg').textContent='Saved ✓';return true}catch(e){toast('Could not save: '+e.message);return false}};
+ $('#save').onclick=()=>save().then(ok=>ok&&settings());
+ $('#logout')&&($('#logout').onclick=()=>post('/api/logout',{}).then(()=>location.reload()));
+ $('#pwf').onsubmit=async e=>{e.preventDefault();try{await post('/api/setup',Object.fromEntries(new FormData(e.target)));toast('Login saved');settings()}catch(er){toast('Could not save: '+er.message)}};
+ $('#prev').onclick=async()=>{if(!await save())return;$('#prevbox').innerHTML=spinner('Previewing…');try{const p=await api('/api/auto/preview');
+  const g=d3.rollups(p.items,v=>[v.length,d3.sum(v,i=>i.size)],i=>i.group).sort((a,b)=>b[1][1]-a[1][1]);
+  $('#prevbox').innerHTML=`<p>If auto-clean ran now it would free about <b>${fmt(p.estimated)}</b>:</p><div class="bars">${g.map(([k,[n,s]],i)=>`<div class="r"><span class="n">${esc(META.groups.find(x=>x.id===k)?.name||k)} · ${n}</span><span class="t"><i style="width:${s/(g[0][1][1]||1)*100}%;background:${PAL[i%PAL.length]}"></i></span><span>${fmt(s)}</span></div>`).join('')}</div>`}catch(e){$('#prevbox').textContent='Error: '+e.message}};
+}catch(e){fail(e)}}
+async function autoRun(){const p=await api('/api/auto/preview');
+ if(!confirm(`Auto-clean will run: ${plural(p.items.length,'item')}, about ${fmt(p.estimated)}.\nGroups: ${META?.conf.auto.groups.join(', ')}\nMode: ${META?.conf.auto.mode==='trash'?'Trash':'permanent'}`))return;
+ const r=await post('/api/auto/run',{});trackJob(r.id)}
+
+// ---------- find: search, duplicates, old files, empty folders, growth ----------
+const PER={daily:'Every day',weekly:'Every week (Sunday)',monthly:'Every month (1st day)',yearly:'Every year (1 January)'};
+const pid=x=>x.includes(':')?x:'chrome:'+x; // old setting: a bare profile folder means Chrome
+function csv(id){const rows=SC[id]?.rows||[],c=v=>`"${String(v??'').replace(/"/g,'""')}"`;
+ const txt='path,kind,size_bytes,modified\n'+rows.map(r=>[c(short(r.path)),r.kind||'file',Math.max(0,r.size||0),r.mtime?new Date(r.mtime*1000).toISOString():''].join(',')).join('\n');
+ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:'text/csv'}));a.download=`diskman-${id}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+const head=t=>$('#crumb').innerHTML=`<span class="mut">${t}</span>`;
+let SQ='',SRV=0,sqT;
+const gq=$('#gq');
+gq.oninput=()=>{SQ=gq.value;clearTimeout(sqT);sqT=setTimeout(()=>S.tab==='search'?runSearch(SQ):go('search'),200)};
+gq.onkeydown=e=>{if(e.key==='Enter'){clearTimeout(sqT);S.tab==='search'?runSearch(gq.value):go('search')}};
+addEventListener('keydown',e=>{if(e.key==='/'&&!e.target.closest('input,textarea,select')&&!$('#modal').innerHTML){e.preventDefault();gq.focus()}});
+function searchView(){head(`Search · every file and folder in ${esc(short(S.status.root))}`);
+ $('#main').innerHTML=`<div class="bar"><input id="sq" type="search" placeholder="File or folder name — several words must all match, e.g. invoice 2024 pdf" value="${esc(SQ)}" style="flex:1;min-width:220px" aria-label="Search files and folders"></div><div id="sres"></div>`;
+ const i=$('#sq');if(document.activeElement!==gq)i.focus();i.oninput=()=>{SQ=gq.value=i.value;clearTimeout(sqT);sqT=setTimeout(()=>runSearch(SQ),200)};runSearch(SQ)}
+async function runSearch(v){SQ=v.trim();if($('#sq')&&$('#sq').value.trim()!==SQ)$('#sq').value=SQ;const el=$('#sres');if(!el)return;
+ if(SQ.length<2){el.innerHTML='<div class="spin">Type at least 2 characters. Every file in the scan is searched, small ones too.</div>';return}
+ const t0=performance.now(),my=++SRV;el.innerHTML=spinner('Searching…');
+ try{const rows=await api(`/api/search?q=${q(SQ)}&path=${q(S.status.root)}`);if(my!==SRV)return;scope('srch',rows);
+  el.innerHTML=selBar('srch','trash',`<span class="mut sm">${plural(rows.length,'result')} in ${Math.round(performance.now()-t0)} ms${rows.length>=300?' · the 300 largest are shown, add words to narrow down':''}</span>`)+(rows.length?fileTable('srch',rows,{path:true}):'<div class="spin">No matches.</div>');upd('srch')}
+ catch(e){if(my===SRV)el.innerHTML=`<div class="spin">Error: ${esc(e.message)}</div>`}}
+
+let dupMin=store.get('dupmin',10);
+async function dupes(){const rv=RV;head('Duplicate files · byte-for-byte identical (full content hash)');
+ let d;try{d=await api('/api/dupes')}catch(e){return fail(e)}if(stale(rv))return;
+ const ctl=`<label class="mut">Files of at least <input type=number id=dmin value=${dupMin} min=1 style="width:80px"> MB</label><button class="btn pri" id="drun" ${d.running?'disabled':''}>${d.groups?'Search again':'Find duplicates'}</button>`;
+ let body;
+ if(d.running){const pct=d.phase==='full'?(d.tbytes?d.bytes/d.tbytes:0):(d.total?d.done/d.total:0);
+  body=`<div class="card" style="max-width:640px"><h3>${d.phase==='full'?'Comparing full contents':'Comparing samples'}</h3><div class="kpi"><div class="v">${Math.round(pct*100)}%</div><div class="s">${d.phase==='full'?`${fmt(d.bytes)} of ${fmt(d.tbytes)} read`:`${num(d.done)} of ${plural(d.total,'candidate')}`}</div></div><div class="meter"><i style="width:${pct*100}%"></i></div></div>`;
+  setTimeout(()=>!stale(rv)&&dupes(),900)}
+ else if(!d.groups)body=`<div class="card" style="max-width:640px"><p>Finds files with exactly the same content anywhere in <b>${esc(short(S.status.root))}</b>: same size first, then a sample of the content, then the full content. Only files that match byte for byte are listed.</p><p class="mut sm">Files over 1 MB are compared. Large disks can take a few minutes; you can leave this page meanwhile.</p></div>`;
+ else{const rows=d.groups.flatMap((g,gi)=>g.files.map(f=>({path:f.path,size:g.size,mtime:f.mtime,kind:'file',type:f.type,g:gi})));scope('dup',rows);
+  const waste=d3.sum(d.groups,g=>g.size*(g.files.length-1));
+  body=`<div class="bar"><span class="mut sm">${plural(d.groups.length,'group')} · <b>${fmt(waste)}</b> can be freed by keeping one copy each${d.root&&d.root!==S.status.root?` · results for ${esc(short(d.root))}`:''} · ${age(d.at)}</span>
+   <button class="btn sm" data-dupkeep="new">Select all but the newest</button><button class="btn sm" data-dupkeep="old">Select all but the oldest</button></div>`+
+   d.groups.slice(0,500).map((g,gi)=>`<div class="card dg"><h4>${TYPE_ICO[g.files[0].type]??'📄'} ${fmt(g.size)} × ${g.files.length}<span class="mut sm">${fmt(g.size*(g.files.length-1))} extra</span></h4><table>${g.files.map(f=>`<tr ${pend(f.path)}><td style="width:28px">${cbox(f.path,'dup')}</td><td class="path">${esc(short(f.path))}</td><td class="sm mut" style="white-space:nowrap">${age(f.mtime)}</td><td class="sm" style="white-space:nowrap"><a data-ex="${esc(f.path.replace(/\/[^/]*$/,''))}">open</a> · <a data-rv="${esc(f.path)}">Finder</a></td></tr>`).join('')}</table></div>`).join('')+
+   (d.groups.length>500?`<div class="spin">The 500 groups that free the most space are shown.</div>`:'')}
+ $('#main').innerHTML=(d.groups&&!d.running?selBar('dup','trash',ctl):`<div class="bar">${ctl}</div>`)+body;
+ $('#dmin').onchange=e=>{dupMin=+e.target.value||10;store.set('dupmin',dupMin)};
+ $('#drun').onclick=async()=>{try{await post('/api/dupes/run',{min:dupMin});dupes()}catch(e){toast('Error: '+e.message)}};upd('dup')}
+function dupPick(mode){const s=SC.dup;if(!s)return;s.sel.clear();
+ d3.groups(s.rows,r=>r.g).forEach(([,fs])=>{const keep=fs.reduce((a,b)=>(mode==='new'?b.mtime>a.mtime:b.mtime<a.mtime)?b:a);fs.forEach(f=>f!==keep&&!PEND.has(f.path)&&s.sel.add(f.path))});
+ document.querySelectorAll('input[data-sc="dup"]').forEach(i=>i.checked=s.sel.has(i.dataset.p));upd('dup')}
+
+let oldYears=store.get('oldy',2),oldMin=store.get('oldmin',50);
+async function oldFiles(){const rv=RV;head('Old files · large files nobody changed for years');loading();try{
+ const rows=await api(`/api/big?min=${oldMin}&older=${oldYears*365}`);if(stale(rv))return;scope('old',rows);
+ $('#main').innerHTML=selBar('old','trash',`<label class="mut">Unchanged for <select id="oy">${[1,2,3,5,10].map(y=>`<option value="${y}" ${y==oldYears?'selected':''}>${plural(y,'year')}</option>`).join('')}</select></label>
+  <label class="mut">at least <input type=number id=om value=${oldMin} min=1 style="width:80px"> MB</label><span class="mut sm">${plural(rows.length,'file')} · ${fmt(d3.sum(rows,r=>r.size))}</span>`)+(rows.length?fileTable('old',rows,{path:true}):'<div class="spin">No files match.</div>');
+ $('#oy').onchange=e=>{oldYears=+e.target.value;store.set('oldy',oldYears);oldFiles()};$('#om').onchange=e=>{oldMin=+e.target.value||50;store.set('oldmin',oldMin);oldFiles()};upd('old')}catch(e){fail(e)}}
+
+async function emptyView(){const rv=RV;head(`Empty folders in ${esc(short(S.focus))} · no files inside, at most empty subfolders`);loading();try{
+ const rows=(await api('/api/empty?path='+q(S.focus))).map(r=>({...r,n:null}));if(stale(rv))return;scope('empty',rows);
+ $('#main').innerHTML=selBar('empty','rm',`<span class="mut sm">${plural(rows.length,'empty folder')}${rows.length>=3000?' (first 3000)':''} · apps sometimes expect their empty folders, check before deleting system or app folders</span>`)+(rows.length?fileTable('empty',rows,{path:true}):'<div class="spin">No empty folders here.</div>');upd('empty')}catch(e){fail(e)}}
+
+let GSINCE=null;
+async function growthView(){const rv=RV;head(`Growth · what changed in ${esc(short(S.focus))}`);loading();try{
+ const d=await api(`/api/growth?path=${q(S.focus)}${GSINCE?'&since='+GSINCE:''}`);if(stale(rv))return;
+ if(d.snaps.length<2){$('#main').innerHTML=`<div class="card" style="max-width:640px"><h3>Not enough history yet</h3><p>DiskMan keeps one snapshot of folder sizes per day (last 60 days). Growth compares today with an earlier day, so it needs scans on at least two different days.</p><p class="mut sm">${d.snaps.length?`First snapshot: ${new Date(d.snaps[0]*1000).toLocaleString('en-GB')}. `:''}The service refreshes the scan every night at 04:00.</p></div>`;return}
+ const dl=d.new-d.old,mx=d3.max(d.rows,r=>Math.abs(r.delta))||1,sgn=v=>(v>0?'+':v<0?'−':'')+fmt(Math.abs(v));
+ $('#main').innerHTML=`<div class="bar"><label class="mut">Compare with <select id="gs">${d.snaps.slice(0,-1).reverse().map(t=>`<option value="${t}" ${Math.abs(t-d.since)<1?'selected':''}>${new Date(t*1000).toLocaleDateString('en-GB',{dateStyle:'medium'})}</option>`).join('')}</select></label>
+  <span class="sum">${fmt(d.old)} → ${fmt(d.new)} <span class="gdelta ${dl>0?'up':'dn'}">${sgn(dl)}</span></span></div>
+  ${d.rows.length?`<div class="card" style="padding:0;overflow:auto"><table><thead><tr><th>Folder</th><th style="text-align:right">Before</th><th style="text-align:right">Now</th><th style="text-align:right">Change</th></tr></thead><tbody>${d.rows.map(r=>`<tr><td class="path">📁 <a data-go="${esc(r.path)}">${esc(short(r.path))}</a></td><td class="sm mut" style="text-align:right">${fmt(r.old)}</td><td class="sm" style="text-align:right">${fmt(r.new)}</td>
+   <td class="sz"><b style="width:${Math.abs(r.delta)/mx*100}%;background:${r.delta>0?'var(--red)':'var(--grn)'}"></b><span class="gdelta ${r.delta>0?'up':'dn'}">${sgn(r.delta)}</span></td></tr>`).join('')}</tbody></table></div>`:'<div class="spin">No folder changed by more than 1 MB.</div>'}`;
+ $('#gs').onchange=e=>{GSINCE=+e.target.value;growthView()}}catch(e){fail(e)}}
+
+// ---------- graph: folders, file types, containers, apps, duplicates ----------
+const GK={root:['Folder you are in','var(--acc)'],dir:['Folders','#5aa9ff'],type:['File types',null],container:['Docker containers','var(--acc2)'],app:['Apps','#8b8cf8'],file:['Duplicate files','#f472b6']};
+const GL={contains:'contains',type:'mostly',uses:'mounts',data:'stores data in',dup:'same content'};
+let GHIDE=new Set(store.get('ghide',[]));
+async function graphView(){const rv=RV;head(`Graph · how folders, file types, containers and apps relate in ${esc(short(S.focus))}`);loading('Building the graph…');let d;
+ try{d=await api('/api/graph?path='+q(S.focus))}catch(e){return fail(e)}if(stale(rv))return;
+ const kinds=[...new Set(d.nodes.map(n=>n.kind))];
+ $('#main').innerHTML=`<div class="bar"><div class="chips">${kinds.filter(k=>k!=='root').map(k=>`<button class="chip ${GHIDE.has(k)?'':'on'}" data-gk="${k}"><b style="background:${GK[k][1]||'#f5b843'}"></b>${GK[k][0]}</button>`).join('')}</div>
+  <span class="mut sm" style="margin-left:auto">Click a folder to go inside · drag nodes · scroll to zoom${(S.status.root!==S.focus)?` · <a data-go="${esc(upOf(S.focus))}">⤴ up</a>`:''}${d.nodes.some(n=>n.kind==='file')?'':' · run <a data-t="dupes">Duplicates</a> to see copies here'}</span></div>
+  <div class="card" style="padding:0;height:max(420px,calc(100vh - 200px));overflow:hidden"><svg id="gsvg" width="100%" height="100%" role="img" aria-label="Relationship graph"></svg></div>`;
+ document.querySelectorAll('[data-gk]').forEach(b=>b.onclick=()=>{const k=b.dataset.gk;GHIDE.has(k)?GHIDE.delete(k):GHIDE.add(k);store.set('ghide',[...GHIDE]);graphView()});
+ const nodes=d.nodes.filter(n=>!GHIDE.has(n.kind)),ids=new Set(nodes.map(n=>n.id)),links=d.links.filter(l=>ids.has(l.source)&&ids.has(l.target));
+ const el=$('#gsvg'),W=el.clientWidth,H=el.clientHeight,mx=d3.max(nodes,n=>n.size)||1;
+ const rad=n=>n.kind==='root'?22:Math.max(5,Math.sqrt((n.size||0)/mx)*30);
+ const col=n=>n.kind==='type'?TYPE_COL[n.type]:n.kind==='file'?TYPE_COL[n.type]??'#f472b6':n.kind==='container'&&!n.running?'#4b5260':GK[n.kind][1];
+ const lcol={contains:'var(--line)',type:'#f5b843',uses:'var(--acc2)',data:'#8b8cf8',dup:'#f472b6'};
+ const svg=d3.select(el),g=svg.append('g');let auto=true;
+ const zm=d3.zoom().scaleExtent([.1,5]).on('zoom',e=>{if(e.sourceEvent)auto=false;g.attr('transform',e.transform)});svg.call(zm);
+ const fit=()=>{if(!auto||!nodes.length)return;const xs=nodes.map(n=>n.x),ys=nodes.map(n=>n.y),x0=d3.min(xs)-50,x1=d3.max(xs)+50,y0=d3.min(ys)-40,y1=d3.max(ys)+50,
+  k=Math.min(W/(x1-x0),H/(y1-y0),1.4);svg.call(zm.transform,d3.zoomIdentity.translate(W/2,H/2).scale(k).translate(-(x0+x1)/2,-(y0+y1)/2))};
+ const lk=g.append('g').selectAll('line').data(links).join('line').attr('stroke',l=>lcol[l.kind]).attr('stroke-width',l=>l.kind==='dup'?2.5:l.kind==='contains'?1.2:1.6).attr('stroke-dasharray',l=>l.kind==='uses'||l.kind==='data'?'4 3':l.kind==='dup'?'2 3':null).attr('stroke-opacity',.8);
+ const nd=g.append('g').selectAll('g').data(nodes).join('g').attr('class','nd');
+ nd.append('circle').attr('r',rad).attr('fill',col);
+ nd.classed('lbl',n=>rad(n)>=8||n.kind!=='dir');
+ nd.append('text').attr('dy',n=>rad(n)+12).attr('text-anchor','middle').text(n=>{const l=n.label.includes('/')?short(n.label):n.label;return l.length>22?l.slice(0,21)+'…':l});
+ const nb=new Map(nodes.map(n=>[n.id,new Set([n.id])]));links.forEach(l=>{nb.get(l.source).add(l.target);nb.get(l.target).add(l.source)});
+ let ticks=0;
+ const sim=d3.forceSimulation(nodes).alphaDecay(.05).on('end',fit).force('link',d3.forceLink(links).id(n=>n.id).distance(l=>l.kind==='contains'?70:110).strength(l=>l.kind==='contains'?.7:.3))
+  .force('charge',d3.forceManyBody().strength(-180)).force('x',d3.forceX(W/2).strength(.05)).force('y',d3.forceY(H/2).strength(.07)).force('center',d3.forceCenter(W/2,H/2)).force('collide',d3.forceCollide(n=>rad(n)+6))
+  .on('tick',()=>{if(++ticks%25===0)fit();lk.attr('x1',l=>l.source.x).attr('y1',l=>l.source.y).attr('x2',l=>l.target.x).attr('y2',l=>l.target.y);nd.attr('transform',n=>`translate(${n.x},${n.y})`)});
+ nd.call(d3.drag().on('start',(e,n)=>{if(!e.active)sim.alphaTarget(.3).restart();n.fx=n.x;n.fy=n.y}).on('drag',(e,n)=>{n.fx=e.x;n.fy=e.y}).on('end',(e,n)=>{if(!e.active)sim.alphaTarget(0);n.fx=n.fy=null}));
+ nd.on('mouseenter',(e,n)=>{const s=nb.get(n.id);nd.classed('dim',m=>!s.has(m.id)).classed('show',m=>s.has(m.id));lk.classed('dim',l=>l.source.id!==n.id&&l.target.id!==n.id);
+   const rel=links.filter(l=>l.source.id===n.id||l.target.id===n.id).slice(0,8).map(l=>{const o=l.source.id===n.id?l.target:l.source;return `${l.source.id===n.id?'':'← '}${GL[l.kind]} <b>${esc(o.label)}</b>`}).join('<br>');
+   showTip(e,`<b>${esc(n.label)}</b> · ${GK[n.kind][0].replace(/s$/,'')}<br>${fmt(n.size)}${n.image?`<br><span class="mut">${esc(n.image)}${n.running?'':' · stopped'}</span>`:''}${n.path?`<br><span class="mut">${esc(short(n.path))}</span>`:''}${rel?'<br>'+rel:''}`)})
+  .on('mousemove',(e)=>{tip.style.left=Math.min(e.clientX+14,innerWidth-tip.offsetWidth-8)+'px';tip.style.top=Math.min(e.clientY+14,innerHeight-tip.offsetHeight-8)+'px'})
+  .on('mouseleave',()=>{nd.classed('dim',false).classed('show',false);lk.classed('dim',false);hideTip()})
+  .on('click',(e,n)=>{hideTip();if((n.kind==='dir'||n.kind==='root')&&n.path!==S.focus)setFocus(n.path);else if(n.kind==='file'){S.tab='explorer';setFocus(n.path.replace(/\/[^/]*$/,''))}else if(n.kind==='container')go('docker')})}
+
+// ---------- events ----------
+const SEL='[data-t],[data-go],[data-ex],[data-rv],[data-open],[data-del],[data-delsel],[data-cell],[data-lb],[data-lbn],[data-close],[data-backdrop],[data-chart],[data-metric],[data-view],[data-ft],[data-sort],[data-tile],[data-pick],[data-pickauto],[data-autorun],[data-clearsearch],[data-jx],[data-csv],[data-dupkeep],[data-gnode]';
+document.addEventListener('click',async e=>{
+ const cb=e.target.matches('input[type=checkbox]')?e.target:null;
+ if(cb){const g=cb.dataset;
+  if(g.p!==undefined){const s=SC[g.sc];if(s){cb.checked?s.sel.add(g.p):s.sel.delete(g.p);cb.closest('.tile,.ph')?.classList.toggle('sel',cb.checked);upd(g.sc)}}
+  const bulk=(id,f)=>{const s=SC[id];if(!s)return;s.rows.filter(r=>f(r)&&!PEND.has(r.path)).forEach(r=>cb.checked?s.sel.add(r.path):s.sel.delete(r.path));document.querySelectorAll(`input[data-sc="${id}"]`).forEach(i=>i.checked=s.sel.has(i.dataset.p));upd(id)};
+  if(g.all)bulk(g.all,()=>true);if(g.kind)bulk('sug',r=>r.kind===g.kind);if(g.group)bulk('cl',r=>r.group===g.group);
+  return}
+ const t=e.target.closest(SEL);if(!t)return;const g=t.dataset;
+ try{
+ if(g.backdrop!==undefined){if(e.target===t)closeModal();return}
+ if(g.close!==undefined)return closeModal();
+ if(g.jx){HIDE.add(+g.jx);drawJobs();return}
+ if(g.t){closeModal();go(g.t)}
+ if(g.go){closeModal();if(!['treemap','sunburst','overview','charts','explorer'].includes(S.tab))S.tab='explorer';setFocus(g.go)}
+ if(g.ex){closeModal();S.tab='explorer';setFocus(g.ex)}
+ if(g.rv)api('/api/reveal?path='+q(g.rv));
+ if(g.open)api('/api/open?path='+q(g.open));
+ if(g.del){const r=await doDelete([g.del],'trash',+g.size);if(r){closeModal();render()}}
+ if(g.delsel){const s=SC[g.delsel],list=[...s.sel],items=s.rows.filter(r=>s.sel.has(r.path)),mode=$('#mode-'+g.delsel).value;
+  const opts=g.delsel==='cl'?{url:'/api/clean/run'}:g.delsel==='sug'?{contents:items.filter(i=>i.contents).map(i=>i.path)}:{};
+  const r=await doDelete(list,mode,d3.sum(items,i=>Math.max(0,i.size||0)),opts);if(r){if(g.delsel==='cell')closeModal();render()}}
+ if(g.cell){const [i,j]=g.cell.split(',').map(Number);heatCell(i,j)}
+ if(g.lb)lightbox(g.lb,g.sc);
+ if(g.lbn&&LB)LB.step(+g.lbn);
+ if(g.chart){chartKind=g.chart;store.set('chart',chartKind);charts()}
+ if(g.metric){chartMetric=g.metric;charts()}
+ if(g.view){EX.view=g.view;saveEX();explorer()}
+ if(g.ft!==undefined){const v=g.ft==='d'?'d':g.ft==='clear'?null:+g.ft;EX.types=v===null?[]:EX.types.includes(v)?EX.types.filter(x=>x!==v):[...EX.types,v];saveEX();explorer()}
+ if(g.sort){EX.dir=EX.sort===g.sort?-EX.dir:(g.sort==='name'?1:-1);EX.sort=g.sort;saveEX();explorer()}
+ if(g.tile){const r=SC.ex.rows.find(x=>x.path===g.tile);if(r?.kind==='dir')setFocus(r.path);else if(r&&MEDIA.has(r.type))lightbox(r.path,'ex');else if(r)api('/api/reveal?path='+q(r.path))}
+ if(g.pick){const s=SC.sug;s.rows.filter(r=>r.confidence===g.pick&&!PEND.has(r.path)).forEach(r=>s.sel.add(r.path));document.querySelectorAll('input[data-sc="sug"]').forEach(i=>i.checked=s.sel.has(i.dataset.p));upd('sug')}
+ if(g.pickauto!==undefined){const s=SC.cl,auto=new Set(META.conf.auto.groups);s.rows.filter(r=>auto.has(r.group)&&!PEND.has(r.path)).forEach(r=>s.sel.add(r.path));document.querySelectorAll('input[data-sc="cl"]').forEach(i=>i.checked=s.sel.has(i.dataset.p));upd('cl')}
+ if(g.autorun!==undefined){if(!META)META=await api('/api/clean/meta');await autoRun()}
+ if(g.clearsearch!==undefined){EX.search=null;explorer()}
+ if(g.csv)csv(g.csv);
+ if(g.dupkeep)dupPick(g.dupkeep);
+ }catch(er){toast('Error: '+er.message)}
+});
+let rt;addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>['treemap','sunburst','charts'].includes(S.tab)&&render(),250)});
+setInterval(()=>api('/api/ping').catch(()=>{}),20000);
+poll();pollJobs();
+</script></body></html>
