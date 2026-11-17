@@ -556,6 +556,23 @@ def suggestions(big_files, conf):
         ps.sort(key=lambda p: -os.stat(p).st_mtime)
         for p in ps[1:]:
             out.append(_sug("xcode", "Old iOS device symbols", f"A newer version exists for {dev}", p, du(p), "high"))
+    # 4b) Xcode DerivedData: per-project build output, rebuilt on next build
+    for p in glob(H("Library/Developer/Xcode/DerivedData/*")):
+        if not os.path.isdir(p) or (s := du(p)) < 50 << 20:
+            continue
+        try:
+            with open(os.path.join(p, "info.plist"), "rb") as f:
+                ws = plistlib.load(f).get("WorkspacePath", "")
+        except (OSError, plistlib.InvalidFileException):
+            ws = ""
+        age = int(days(os.stat(p).st_mtime))
+        if ws and not os.path.exists(ws):
+            out.append(_sug("xcode", "Xcode build data (project deleted)", f"Project {ws.replace(HOME, '~')} no longer exists", p, s, "high"))
+        elif ws:
+            out.append(_sug("xcode", "Xcode build data", f"Build output of {os.path.basename(ws)}, untouched {age} days; Xcode rebuilds it",
+                            p, s, "high" if age >= 30 else "medium" if age >= 7 else "low", age=age))
+        else:  # ModuleCache.noindex, CompilationCache.noindex…: shared caches
+            out.append(_sug("xcode", "Xcode shared build cache", "Shared module/compilation cache; Xcode rebuilds it", p, s, "medium"))
     # 5) large app caches (not in the curated list)
     for p in glob(H("Library/Caches/*")):
         if os.path.basename(p) not in APP_CACHES and os.path.isdir(p):

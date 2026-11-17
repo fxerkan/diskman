@@ -97,6 +97,19 @@ svg text{font:11px ui-sans-serif,-apple-system,system-ui,sans-serif;pointer-even
 .warn{background:rgba(245,184,67,.12);border:1px solid var(--amb);color:var(--fg);border-radius:9px;padding:9px 12px;margin-bottom:12px;font-size:13px}
 .form{display:grid;gap:12px}.form label{display:flex;flex-direction:column;gap:5px;font-size:13px}.form .chk{flex-direction:row;align-items:flex-start;gap:9px}
 .form .chk small{display:block;color:var(--mut)}
+.ai{height:100%;display:flex;flex-direction:column;gap:10px;max-width:980px;margin:0 auto}
+.ai-log{flex:1;overflow:auto;display:flex;flex-direction:column;gap:10px;padding:2px 2px 8px}
+.ai-u{align-self:flex-end;background:var(--accbg);border:1px solid var(--line);border-radius:12px 12px 2px 12px;padding:8px 12px;max-width:80%;white-space:pre-wrap}
+.ai-a{max-width:100%}.ai-a p{margin:0 0 6px}.ai-a h4{margin:10px 0 4px}.ai-a ul{margin:0 0 6px;padding-left:20px}.ai-a table{margin:6px 0;font-size:13px}
+.ai code,.ai pre{font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace}.ai code{background:var(--panel2);border-radius:4px;padding:1px 4px}
+.ai pre{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:6px 0 0;overflow:auto;max-height:340px;white-space:pre-wrap;word-break:break-all}
+.ai-t{font-size:12px;color:var(--mut)}.ai-t summary{cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ai-t.err summary{color:var(--red)}
+.ai-ask{background:var(--panel);border:1px solid var(--amb);border-radius:12px;padding:11px 13px;box-shadow:var(--glow)}
+.ai-ask.allow,.ai-ask.always{border-color:var(--grn)}.ai-ask.deny{border-color:var(--line);opacity:.7}.ai-ask .bar{margin:10px 0 0}
+.ai-in{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px;display:grid;gap:8px}
+.ai-in textarea{width:100%;resize:vertical;min-height:52px;border:0;background:transparent;padding:4px}.ai-in textarea:focus{outline:none}
+.ai-busy{color:var(--mut);font-size:13px}.ai-busy:before{content:'';display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--acc);margin-right:8px;animation:pulse 1s infinite alternate}
+@keyframes pulse{to{opacity:.2}}
 @media (max-width:900px){body{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto 1fr}header>div:last-child{flex:1 1 100%;min-width:0}#chg{flex-basis:100%;order:3;margin:0!important}#root{flex:1;min-width:0;max-width:none!important}aside{grid-row:auto;flex-direction:row;overflow:auto;padding:8px}aside .logo,aside .vols,.navh{display:none}#gq{flex:1;min-width:0;width:auto}
  .c3,.c4,.c6,.c8{grid-column:span 12}.viz,.lb{grid-template-columns:1fr;height:auto}.viz .stage{height:65vh}main{padding:12px 16px}}
 </style></head><body>
@@ -121,6 +134,8 @@ svg text{font:11px ui-sans-serif,-apple-system,system-ui,sans-serif;pointer-even
  <button data-t="clean">✦ Cleanup rules</button>
  <button data-t="docker">🐳 Docker</button>
  <button data-t="settings">⚙ Auto-clean & settings</button>
+ <div class="navh">Assistant</div>
+ <button data-t="assistant">✨ AI assistant <span class="badge" id="aib" hidden></span></button>
  <div class="vols" id="vols"></div>
 </aside>
 <header>
@@ -156,15 +171,17 @@ const short=p=>{if(p==='*')return 'All disks';if(p&&S.home&&p.startsWith(S.home)
 // '*' = all disks merged into one tree; its children are the disk roots
 const within=(p,r)=>p===r||p.startsWith(r.replace(/\/$/,'')+'/');
 const inView=p=>{const r=S.status?.root;return !!(p&&r)&&(r==='*'||within(p,r))};
-const diskOf=p=>(S.status?.volumes||[]).filter(v=>within(p,v.scan)).sort((a,b)=>b.scan.length-a.scan.length)[0];
+const diskOf=p=>(S.status?.volumes||[]).map(v=>[v,Math.max(...[v.scan,v.path].map(r=>within(p,r)?r.length:-1))]).filter(x=>x[1]>=0).sort((a,b)=>b[1]-a[1])[0]?.[0];
 const upOf=p=>{const s=S.status;if(p==='*')return p;if(s?.root==='*'&&s.volumes.some(v=>v.scan===p))return '*';
  let u=p.replace(/\/[^/]+\/?$/,'');if(/^[A-Za-z]:$/.test(u))u+='/';return u||'/'};
+const STALE='⚠ changed since the last scan';
+const staleMark=sel=>sel.filter(d=>d.data.stale).attr('stroke','var(--amb)').attr('stroke-opacity',1).attr('stroke-width',2).attr('stroke-dasharray','5 3');
 const textOn=c=>d3.hsl(c).l>.55?'#1a1c20':'#fff';
 function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(t._h);t._h=setTimeout(()=>t.style.display='none',7000)}
 const tip=$('#tip');
 function showTip(e,html){tip.innerHTML=html;tip.style.display='block';const x=Math.min(e.clientX+14,innerWidth-tip.offsetWidth-8),y=Math.min(e.clientY+14,innerHeight-tip.offsetHeight-8);tip.style.left=x+'px';tip.style.top=y+'px'}
 const hideTip=()=>tip.style.display='none';
-const tipHtml=(d,total)=>`<b>${esc(d.name)}</b><br>${fmt(d.size)}${total?` · ${(d.size/total*100).toFixed(1)}%`:''}${d.n!=null&&d.kind==='dir'?` · ${plural(d.n,'file')}`:''}${d.mtime?`<br><span class="mut">${age(d.mtime)}</span>`:''}${d.kind==='other'||d.kind==='small'?'<br><span class="mut">grouped</span>':''}`;
+const tipHtml=(d,total)=>`<b>${esc(d.name)}</b><br>${fmt(d.size)}${total?` · ${(d.size/total*100).toFixed(1)}%`:''}${d.n!=null&&d.kind==='dir'?` · ${plural(d.n,'file')}`:''}${d.mtime?`<br><span class="mut">${age(d.mtime)}</span>`:''}${d.kind==='other'||d.kind==='small'?'<br><span class="mut">grouped</span>':''}${d.stale?`<br><span style="color:var(--amb)">${STALE}</span>`:''}`;
 const spinner=(m='Loading…')=>`<div class="spin">${m}<div class="prog" style="max-width:300px;margin:12px auto"><i></i></div></div>`;
 const loading=m=>$('#main').innerHTML=spinner(m);
 const fail=e=>$('#main').innerHTML=`<div class="spin">Error: ${esc(e.message)}</div>`;
@@ -182,11 +199,13 @@ function rootOptions(s){const seen=new Set(),opt=(p,l)=>seen.has(p)?'':(seen.add
 function renderChg(s){const e=$('#chg');
  e.innerHTML=s.checking?'Checking for changes since the last scan…'
   :s.running||!s.done?''
-  :s.changed?`<b style="color:var(--fg)">${plural(s.changed,'folder')} changed</b> (last scan ${when(s.end)}) <button class="btn" data-scan="inc">Rescan changes</button> <button class="btn" data-scan="full">Full scan</button>`
+  :s.changed?`<b style="color:var(--fg)">${plural(s.changed,'folder')} changed</b> <span style="color:var(--amb)" title="Folders with changes are outlined in amber in the views">⚠ marked</span> (last scan ${when(s.end)}) <button class="btn" data-scan="inc">Rescan changes</button> <button class="btn" data-scan="full">Full scan</button>`
   :`${s.from_cache?'From cache':'Scanned'} · ${when(s.end)} · up to date <button class="btn" data-scan="full">Full scan</button>`}
 async function startScan(mode,root){try{await post('/api/scan',{root:root??S.status?.root,mode});S.sel=null;cache={};poll()}catch(e){toast('Error: '+e.message)}}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-scan]');if(b)startScan(b.dataset.scan)});
 $('#root').onchange=()=>{const el=$('#root'),v=el.value,s=S.status;
+ if(s?.done&&!s.running&&inView(v))return setFocus(v);
+ if(s?.volumes.some(x=>x.scan===v))return openDisk(v);
  // already-scanned disk or the merged view: switch right away (loads from cache, then checks for changes)
  if(v==='*'||s?.roots?.some(r=>r.root===v&&r.done)){S.focus=null;return startScan('auto',v)}
  if(v!=='__other')return;
@@ -200,17 +219,27 @@ async function poll(){const prev=S.status;
  renderChg(s);drawVols(s);
  $('#scan').disabled=s.running||s.checking;
  if(s.running){if(NEEDS_TREE.has(S.tab))renderProgress();setTimeout(poll,1000);return}
- if(s.done&&(!inView(S.focus)||s.root!==prev?.root||s.end!==prev?.end||prev?.running)){if(!inView(S.focus))S.focus=s.root;cache={};render();loadSugBadge()}
+ if(s.done&&(!inView(S.focus)||s.root!==prev?.root||s.end!==prev?.end||prev?.running||prev?.checking&&!s.checking)){if(!inView(S.focus))S.focus=s.root;cache={};render();loadSugBadge()}
  if(s.checking)return setTimeout(poll,1000);
  setTimeout(poll,15000);
 }
-const drawVols=s=>$('#vols').innerHTML=s.volumes.map(v=>`<div class="vol"><div>${esc(v.name)}</div><div class="meter ${v.used/v.total>.9?'hot':''}"><i style="width:${v.used/v.total*100}%"></i></div><div class="mut">${fmt(v.free)} free of ${fmt(v.total)}</div></div>`).join('');
+const drawVols=s=>$('#vols').innerHTML=s.volumes.map(v=>`<div class="vol" data-vol="${esc(v.scan)}" title="Show ${esc(v.name)}" style="cursor:pointer"><div>${esc(v.name)}</div><div class="meter ${v.used/v.total>.9?'hot':''}"><i style="width:${v.used/v.total*100}%"></i></div><div class="mut">${fmt(v.free)} free of ${fmt(v.total)}</div></div>`).join('');
 const NEEDS_TREE=new Set(['overview','treemap','sunburst','charts','big','search','dupes','old','empty','growth','graph']);
 function renderProgress(){const s=S.status,run=s.roots.filter(r=>r.running&&(s.root==='*'?s.volumes.some(v=>v.scan===r.root):r.root===s.root));
  $('#main').innerHTML=`<div class="card" style="max-width:640px;margin:40px auto"><h3>Scanning${run.length>1?` ${run.length} disks in parallel`:''}</h3><div class="kpi"><div class="v">${fmt(s.bytes)}</div>
  <div class="s">${plural(s.files,'file')} · ${plural(s.dirs,'folder')} · ${Math.round(s.now-s.start)} s</div></div>
  ${run.length>1?run.map(r=>`<div class="sm" style="margin-top:8px"><b>${esc(short(r.root))}</b> · ${fmt(r.bytes)} · ${plural(r.files,'file')}<div class="mut path">${esc(short(r.cur))}</div></div>`).join(''):`<div class="mut sm path" style="margin-top:8px">${esc(short(s.cur))}</div>`}<div class="prog"><i></i></div>
  <p class="mut sm">${s.kind==='inc'?'Only changed folders are being scanned.':s.kind==='cache'?'Loading the previous scan.':'A home folder takes about a minute.'} Meanwhile you can check <a data-t="clean">Cleanup rules</a>, <a data-t="docker">Docker</a>, the <a data-t="explorer">File explorer</a> or <a data-t="settings">Settings</a>.</p></div>`}
+function openDisk(scan){const s=S.status,v=s.volumes.find(x=>x.scan===scan);$('#root').value=scan;
+ if(s.done&&!s.running&&inView(scan))return setFocus(scan);
+ const done=[...s.cached.map(c=>c.path),...s.roots.filter(r=>r.done).map(r=>r.root)];S.focus=null;
+ if(done.includes(scan))return startScan('auto',scan); // last scan from the cache right away, then only checks for changes
+ const sub=done.filter(p=>diskOf(p)?.scan===scan).sort((a,b)=>a.length-b.length)[0];
+ if(sub){$('#root').value=sub;toast(`${v.name} has no full scan yet. Showing ${short(sub)} from its last scan; press Scan with ${v.name} selected to cover the whole disk.`);return startScan('auto',sub)}
+ toast(`${v.name} was never scanned: first scan started.`);startScan('auto',scan)}
+$('#vols').onclick=e=>{const v=e.target.closest('[data-vol]')?.dataset.vol;if(v)openDisk(v)};
+document.addEventListener('click',e=>{if(!e.target.closest('[data-refresh]'))return;
+ post('/api/refresh',{path:S.focus}).then(()=>{toast('Rescanning '+short(S.focus)+'…');cache={};poll()}).catch(er=>toast('Error: '+er.message))});
 $('#scan').onclick=()=>{const r=$('#root').value;if(r!==S.status?.root)S.focus=null;startScan('auto',r)};
 async function loadSugBadge(){try{const s=await get('/api/suggest');const b=$('#sugb');const n=s.filter(x=>x.confidence==='high').length;b.hidden=!n;b.textContent=n}catch{}}
 
@@ -226,8 +255,9 @@ function crumb(){const s=S.status;if(!s||!s.root||!S.focus){$('#crumb').innerHTM
  const all=s.root==='*',f=S.focus,root=all?(f==='*'?'*':diskOf(f)?.scan||'/'):within(f,s.root)?s.root:'/',
   rel=root==='*'?[]:f.slice(root.length).split('/').filter(Boolean);let acc=root;
  $('#crumb').innerHTML=(all&&root!=='*'?`<a data-go="*">All disks</a><span class="mut">›</span>`:'')+`<a data-go="${esc(root)}">${esc(short(root))}</a>`+rel.map(p=>{acc=acc.replace(/\/$/,'')+'/'+p;return `<span class="mut">›</span><a data-go="${esc(acc)}">${esc(p)}</a>`}).join('')+
- (f!==s.root?` <a class="mut sm" data-go="${esc(upOf(f))}" title="Up">⤴</a>`:'')}
-const VIEWS={overview,treemap:()=>viz('treemap'),sunburst:()=>viz('sunburst'),charts,explorer,big,suggest,clean,docker,settings,
+ (f!==s.root?` <a class="mut sm" data-go="${esc(upOf(f))}" title="Up">⤴</a>`:'')+
+ (f!=='*'&&s.done&&!s.running?` <a class="mut sm" data-refresh title="Rescan this folder (picks up files added or deleted outside DiskMan)">↻ Refresh</a>`:'')}
+const VIEWS={assistant,overview,treemap:()=>viz('treemap'),sunburst:()=>viz('sunburst'),charts,explorer,big,suggest,clean,docker,settings,
  search:searchView,dupes,old:oldFiles,empty:emptyView,growth:growthView,graph:graphView};
 let RV=0;const stale=rv=>rv!==RV; // a slow response must not overwrite a newer page
 function render(){RV++;
@@ -264,18 +294,24 @@ async function pollJobs(){clearTimeout(jobT);
  if(finished.length)afterJobs(finished);
  if(active)jobT=setTimeout(pollJobs,600)}
 function drawJobs(){$('#jobs').innerHTML=JOBS.filter(j=>MINE[j.id]&&!HIDE.has(j.id)).map(j=>{
-  const done=j.status==='done',p=done?100:Math.round(100*(j.total?j.bytes/j.total:j.n?j.done/j.n:0)),err=j.errors.length;
-  return `<div class="job ${done&&!err?'ok':''}" role="status"><div class="jh"><b title="${esc(j.title)}">${done?(err?'⚠ ':'✓ '):''}${esc(j.title)}</b><button data-jx="${j.id}" aria-label="Dismiss">✕</button></div>
+  const done=j.status==='done',p=done?100:Math.round(100*(j.total?j.bytes/j.total:j.n?j.done/j.n:0)),skip=j.errors.filter(x=>/skipped/i.test(x.error)).length,err=j.errors.length-skip;
+  return `<div class="job ${done&&!err?'ok':''}" role="status" ${j.errors.length?`data-jerr="${j.id}" title="Click for details" style="cursor:pointer"`:''}><div class="jh"><b title="${esc(j.title)}">${done?(err?'⚠ ':'✓ '):''}${esc(j.title)}</b><button data-jx="${j.id}" aria-label="Dismiss">✕</button></div>
   <div class="jb"><i style="width:${p}%"></i></div>
   <div class="sm mut">${j.status==='queued'?'Queued…':`${p}% · ${num(j.done)}/${num(j.n)} items${j.total?` · ${fmt(j.bytes)} of ${fmt(j.total)}`:''}`}</div>
-  ${done?`<div class="sm" style="margin-top:4px">${j.freed?`<b>${fmt(j.freed)}</b> freed`:'Finished'}${err?` · <span class="risky" title="${esc(j.errors.slice(0,8).map(x=>short(x.path)+': '+x.error).join('\n'))}">${plural(err,'error')}</span>`:''}${j.note?`<div class="mut">${esc(j.note)}</div>`:''}</div>`
+  ${done?`<div class="sm" style="margin-top:4px">${j.freed?`<b>${fmt(j.freed)}</b> freed`:'Finished'}${err?` · <a class="risky">${plural(err,'error')}</a>`:''}${skip?` · <a class="mut">${num(skip)} skipped</a>`:''}${j.note?`<div class="mut">${esc(j.note)}</div>`:''}</div>`
   :j.cur?`<div class="sm mut cur" title="${esc(j.cur)}">${esc(short(j.cur))}</div>`:''}</div>`}).join('')}
+function jobErrors(id){const j=JOBS.find(x=>x.id===id);if(!j)return;
+ const g=d3.groups(j.errors,e=>e.error||'Error').sort((a,b)=>b[1].length-a[1].length);
+ openModal(`<button class="btn x" data-close>✕</button><h3 style="margin-top:0">${esc(j.title)}</h3><p class="mut sm">${j.freed?`${fmt(j.freed)} freed · `:''}${plural(j.errors.length,'item')} not removed, grouped by reason.</p>`+
+  g.map(([m,l])=>`<div class="card" style="margin-bottom:10px"><h4 style="margin:0 0 6px">${esc(m)} <span class="mut sm">· ${plural(l.length,'item')}</span></h4>`+
+   (/skipped/i.test(m)?'<p class="mut sm" style="margin:0 0 6px">Not a failure: skipped on purpose because the app is running and still uses these files. Quit the app, then run the cleanup again.</p>':'')+
+   `<div class="path sm" style="max-height:240px;overflow:auto">${l.map(e=>e.path?`<a data-rv="${esc(e.path)}" title="Show in Finder">${esc(short(e.path))}</a>`:'—').join('<br>')}</div></div>`).join(''))}
 async function afterJobs(finished){
  for(const j of finished){const failed=new Set(j.errors.map(e=>e.path)),ok=MINE[j.id].paths.filter(p=>!failed.has(p));
   MINE[j.id].paths.forEach(p=>PEND.delete(p));
   if(EX.search)EX.search.rows=EX.search.rows.filter(r=>!ok.includes(r.path));
   if(ok.includes(S.focus))S.focus=S.focus.replace(/\/[^/]+$/,'')||'/';
-  setTimeout(()=>{HIDE.add(j.id);drawJobs()},15000)}
+  if(!j.errors.length)setTimeout(()=>{HIDE.add(j.id);drawJobs()},15000)} // with problems: stays until dismissed
  cache={};try{S.status=await api('/api/status');drawVols(S.status)}catch{}
  if(!$('#modal').innerHTML)render();loadSugBadge()}
 
@@ -312,7 +348,7 @@ async function overview(){const rv=RV;loading();try{
  <div class="card c8"><h3>Heatmap · type × last modified <span class="mut" style="text-transform:none;letter-spacing:0">— click a cell to see its files</span></h3><div style="overflow:auto"><table class="heat" id="heat"></table></div></div>
  <div class="card c4"><h3>Largest items</h3><div class="bars" id="bars"></div></div>
  <div class="card c12 kpi"><h3>Scan</h3><div class="s">${esc(short(s.root))} · ${fmt(s.bytes)} · ${plural(s.files,'file')} · ${plural(s.dirs,'folder')} · ${s.kind==='inc'?'incremental update':s.kind==='cache'?'from cache':'full scan'} ${when(s.end)}${s.kind==='inc'?` (charts: full scan ${when(s.full_at)})`:''}${s.errors?` · ${plural(s.errors,'folder')} unreadable (permissions)`:''}</div></div></div>`;
- donut($('#d1'),[{label:'Scanned: '+(s.root===s.home?'home folder':short(s.root)),value:s.bytes,color:PAL[0]},{label:'System / other',value:Math.max(0,vol.used-s.bytes),color:PAL[1]},{label:'Free',value:vol.free,color:'#3a3f4b'}],fmt(vol.free),'free');
+ donut($('#d1'),[{label:'This folder: '+(f===s.home?'home folder':short(f)),value:tree.size,color:PAL[0]},{label:'Rest of the disk',value:Math.max(0,vol.used-tree.size),color:PAL[1]},{label:'Free',value:vol.free,color:'#3a3f4b'}],fmt(vol.free),'free');
  const types=st.types.map((t,i)=>({label:t,value:typeTot[i],color:TYPE_COL[i],i})).filter(d=>d.value>0).sort((a,b)=>b.value-a.value);
  donut($('#d2'),types,fmt(tree.size),plural(tree.n,'file'),d=>{EX.types=[d.i];saveEX();go('explorer')});
  const AC=d3.quantize(d3.interpolateRgb(PAL[1],PAL[0]),st.ages.length);
@@ -355,7 +391,7 @@ async function viz(kind){const rv=RV;loading();try{
   d3.treemap().size([W,H]).paddingOuter(3).paddingTop(d=>d.depth===0?3:18).paddingInner(2).round(true)(root);
   const g=svg.append('g').attr('class','tm').selectAll('g').data(root.descendants().slice(1)).join('g').attr('transform',d=>`translate(${d.x0},${d.y0})`);
   g.append('rect').attr('width',d=>Math.max(0,d.x1-d.x0)).attr('height',d=>Math.max(0,d.y1-d.y0)).attr('rx',4)
-   .attr('fill',d=>d.children?d3.color(color(d)).darker(1.6)+'':color(d)).attr('stroke',d=>d.children?color(d):'none').attr('stroke-opacity',.5)
+   .attr('fill',d=>d.children?d3.color(color(d)).darker(1.6)+'':color(d)).attr('stroke',d=>d.children?color(d):'none').attr('stroke-opacity',.5).call(staleMark)
    .on('mousemove',(e,d)=>showTip(e,tipHtml(d.data,total))).on('mouseleave',hideTip).on('click',onClick);
   g.filter(d=>d.x1-d.x0>44&&(d.children?true:d.y1-d.y0>28)).append('text').attr('x',5).attr('y',13)
    .text(d=>{const w=(d.x1-d.x0-10)/6.2,s=d.data.name+'  '+fmt(d.value);return s.length>w?s.slice(0,Math.max(1,w-1))+'…':s})
@@ -366,7 +402,7 @@ async function viz(kind){const rv=RV;loading();try{
   const r=d3.scaleSqrt([0,depth+1],[0,R]),arc=d3.arc().startAngle(d=>d.x0).endAngle(d=>d.x1).padAngle(d=>Math.min((d.x1-d.x0)/2,.004)).padRadius(R/2)
    .innerRadius(d=>r(d.y0)).outerRadius(d=>r(d.y1)-1);
   const g=svg.append('g').attr('class','sb').attr('transform',`translate(${W/2},${H/2})`);
-  g.selectAll('path').data(root.descendants().slice(1).filter(d=>d.x1-d.x0>.002)).join('path').attr('d',arc).attr('fill',color)
+  g.selectAll('path').data(root.descendants().slice(1).filter(d=>d.x1-d.x0>.002)).join('path').attr('d',arc).attr('fill',color).call(staleMark)
    .on('mousemove',(e,d)=>showTip(e,tipHtml(d.data,total))).on('mouseleave',hideTip).on('click',onClick);
   g.selectAll('text.l').data(root.descendants().slice(1).filter(d=>(d.x1-d.x0)*(r(d.y0)+r(d.y1))/2>34&&r(d.y1)-r(d.y0)>22)).join('text')
    .attr('transform',d=>{const a=(d.x0+d.x1)/2*180/Math.PI,rr=(r(d.y0)+r(d.y1))/2;return `rotate(${a-90}) translate(${rr},0) rotate(${a<180?0:180})`})
@@ -384,6 +420,7 @@ function panel(data){const s=S.sel,el=$('#panel');if(!el)return;
   ${d.n!=null&&d.kind==='dir'?`<div class="row"><span class="mut">Files</span><span>${num(d.n)}</span></div>`:''}
   ${d.mtime?`<div class="row"><span class="mut">Modified</span><span>${age(d.mtime)}</span></div>`:''}
   ${d.type!=null?`<div class="row"><span class="mut">Type</span><span>${S.status.types[d.type]}</span></div>`:''}
+  ${d.stale&&title==='This folder'?`<div class="row"><span style="color:var(--amb)">${STALE}</span><a data-refresh>↻ Refresh</a></div>`:d.stale?`<div class="row"><span style="color:var(--amb)">${STALE}</span></div>`:''}
   <div class="row"><span class="mut">Share of this view</span><span>${(d.size/(data.size||1)*100).toFixed(1)}%</span></div>
   ${(d.kind==='dir'||d.kind==='file')&&d.path!==S.status.root?`<div class="actions"><button class="btn" data-rv="${esc(d.path)}">Finder</button>${d.kind==='dir'?`<button class="btn" data-ex="${esc(d.path)}">Open in explorer</button>`:`<button class="btn" data-open="${esc(d.path)}">Open</button>`}
   <button class="btn danger" data-del="${esc(d.path)}" data-size="${d.size}" ${PEND.has(d.path)?'disabled':''}>Delete…</button></div>`:''}`;
@@ -397,7 +434,7 @@ let chartKind=store.get('chart','pack'),chartMetric='size';
 async function charts(){const rv=RV;
  $('#main').innerHTML=`<div class="bar"><div class="seg">${CHARTS.map(([k,n])=>`<button data-chart="${k}" class="${k===chartKind?'on':''}">${n}</button>`).join('')}</div>
  ${['ext','hist'].includes(chartKind)?`<div class="seg"><button data-metric="size" class="${chartMetric==='size'?'on':''}">Size</button><button data-metric="n" class="${chartMetric==='n'?'on':''}">File count</button></div>`:''}
- <span class="mut sm">${['ext','hist','time'].includes(chartKind)?'Whole scan: '+esc(short(S.status.root)):'Focus: '+esc(short(S.focus))+' — click a folder to enter it'}</span></div>
+ <span class="mut sm">Focus: ${esc(short(S.focus))}${['ext','hist','time'].includes(chartKind)?'':' — click a folder to enter it'}</span></div>
  <div class="card" id="cstage" style="height:calc(100vh - 170px);min-height:420px;padding:10px"></div>`;
  const el=$('#cstage');el.innerHTML=spinner();
  try{const W=el.clientWidth-20,H=el.clientHeight-20;
@@ -409,7 +446,7 @@ async function charts(){const rv=RV;
   if(chartKind==='pack'){
    d3.pack().size([W,H]).padding(d=>d.depth?3:6)(root);
    const n=svg.append('g').attr('class','pk').selectAll('g').data(root.descendants().slice(1)).join('g').attr('transform',d=>`translate(${d.x},${d.y})`);
-   n.append('circle').attr('r',d=>d.r).attr('fill',d=>d.children?d3.color(color(d)).copy({opacity:.14})+'':color(d)).attr('stroke',d=>d.children?color(d):'none').attr('stroke-opacity',.6)
+   n.append('circle').attr('r',d=>d.r).attr('fill',d=>d.children?d3.color(color(d)).copy({opacity:.14})+'':color(d)).attr('stroke',d=>d.children?color(d):'none').attr('stroke-opacity',.6).call(staleMark)
     .on('mousemove',(e,d)=>showTip(e,tipHtml(d.data,total))).on('mouseleave',hideTip).on('click',click);
    n.filter(d=>!d.children&&d.r>22).append('text').attr('text-anchor','middle').attr('dy','.35em').style('fill','#1a1c20').style('font-size',d=>Math.min(13,d.r/4)+'px')
     .text(d=>{const m=Math.floor(d.r/3.4);return d.data.name.length>m?d.data.name.slice(0,m-1)+'…':d.data.name});
@@ -417,13 +454,14 @@ async function charts(){const rv=RV;
   }else{
    d3.partition().size([H,W]).padding(1)(root);
    const n=svg.append('g').attr('class','ic').selectAll('g').data(root.descendants()).join('g').attr('transform',d=>`translate(${d.y0},${d.x0})`);
-   n.append('rect').attr('width',d=>d.y1-d.y0-1).attr('height',d=>Math.max(0,d.x1-d.x0-1)).attr('rx',3).attr('fill',d=>d.depth?color(d):'#3a3f4b')
+   n.append('rect').attr('width',d=>d.y1-d.y0-1).attr('height',d=>Math.max(0,d.x1-d.x0-1)).attr('rx',3).attr('fill',d=>d.depth?color(d):'#3a3f4b').call(staleMark)
     .on('mousemove',(e,d)=>showTip(e,tipHtml(d.data,total))).on('mouseleave',hideTip).on('click',(e,d)=>d.depth?click(e,d):(S.focus!==S.status.root&&setFocus(upOf(S.focus))));
    n.filter(d=>d.x1-d.x0>15).append('text').attr('x',6).attr('y',13).style('fill',d=>d.depth?'#1a1c20':'#fff')
     .text(d=>{const w=(d.y1-d.y0-10)/6.4,s=(d.depth?d.data.name:short(d.data.path))+'  '+fmt(d.value);return s.length>w?s.slice(0,Math.max(1,w-1))+'…':s});
   }
  }else{
-  const c=await get('/api/charts');if(stale(rv))return;el.innerHTML='';
+  if(S.focus!==S.status.root)el.innerHTML=spinner('Reading every file in this folder — a large folder takes up to a minute the first time…');
+  const c=await get('/api/charts?path='+q(S.focus));if(stale(rv))return;el.innerHTML='';
   const svg=d3.select(el).append('svg').attr('viewBox',`0 0 ${W} ${H}`).style('width','100%').style('height','100%');
   const M={t:16,r:20,b:40,l:chartKind==='ext'?110:70};
   if(chartKind==='ext'){
@@ -517,7 +555,7 @@ function fileTable(id,rows,o={}){const max=d3.max(rows,r=>r.size)||1,ar=k=>EX.so
  const nm=r=>esc(rel&&r.path.startsWith(rel)?r.path.slice(rel.length):o.path?short(r.path):(r.name||r.path.split('/').pop()));
  return `<div class="card" style="padding:0;overflow:auto"><table><thead><tr><th style="width:28px"><input type=checkbox data-all="${id}" aria-label="Select all"></th>${th('name',rel?'Path':'Name')}${th('type','Type')}${th('mtime','Modified')}${th('size','Size','style="text-align:right"')}<th></th></tr></thead><tbody>`+
  rows.slice(0,3000).map(r=>`<tr ${pend(r.path)}><td>${cbox(r.path,id)}</td>
-  <td class="path">${r.kind==='dir'?`📁 <a data-go="${esc(r.path)}">${nm(r)}</a>`:`<span style="color:${TYPE_COL[r.type]??'#6b7280'}">●</span> ${MEDIA.has(r.type)?`<a data-lb="${esc(r.path)}" data-sc="${id}">${nm(r)}</a>`:nm(r)}`}${r.n!=null&&r.kind==='dir'?` <span class="mut sm">· ${plural(r.n,'file')}</span>`:''}</td>
+  <td class="path">${r.kind==='dir'?`📁 <a data-go="${esc(r.path)}">${nm(r)}</a>`:`<span style="color:${TYPE_COL[r.type]??'#6b7280'}">●</span> ${MEDIA.has(r.type)?`<a data-lb="${esc(r.path)}" data-sc="${id}">${nm(r)}</a>`:nm(r)}`}${r.n!=null&&r.kind==='dir'?` <span class="mut sm">· ${plural(r.n,'file')}</span>`:''}${r.stale?` <span class="sm" style="color:var(--amb)" title="${STALE}">⚠ changed</span>`:''}</td>
   <td class="sm mut">${r.kind==='dir'?'Folder':S.status.types[r.type]??''}</td><td class="sm mut" style="white-space:nowrap">${r.mtime?age(r.mtime):''}</td>
   <td class="sz"><b style="width:${Math.max(0,r.size)/max*100}%"></b><span>${fmt(r.size)}</span></td>
   <td class="sm" style="white-space:nowrap"><a data-ex="${esc(r.kind==='dir'?r.path:r.path.replace(/\/[^/]*$/,''))}">open</a> · <a data-rv="${esc(r.path)}">Finder</a></td></tr>`).join('')+
@@ -539,7 +577,7 @@ addEventListener('keydown',e=>{if(!$('#modal').innerHTML)return;if(e.key==='Esca
 // ---------- large files ----------
 let bigMin=500;
 async function big(){const rv=RV;loading();try{
- const rows=await api('/api/big?min='+bigMin);if(stale(rv))return;scope('big',rows);
+ const rows=await api(`/api/big?min=${bigMin}&path=${q(S.focus)}`);if(stale(rv))return;scope('big',rows);
  $('#main').innerHTML=selBar('big','trash',`<label class="mut">At least <input type=number id=min value=${bigMin} min=1 style="width:90px"> MB</label><span class="mut sm">${plural(rows.length,'file')} · ${fmt(d3.sum(rows,r=>r.size))}</span>`)+fileTable('big',rows,{path:true});
  $('#min').onchange=e=>{bigMin=+e.target.value||500;big()};upd('big')}catch(e){fail(e)}}
 
@@ -662,41 +700,41 @@ const gq=$('#gq');
 gq.oninput=()=>{SQ=gq.value;clearTimeout(sqT);sqT=setTimeout(()=>S.tab==='search'?runSearch(SQ):go('search'),200)};
 gq.onkeydown=e=>{if(e.key==='Enter'){clearTimeout(sqT);S.tab==='search'?runSearch(gq.value):go('search')}};
 addEventListener('keydown',e=>{if(e.key==='/'&&!e.target.closest('input,textarea,select')&&!$('#modal').innerHTML){e.preventDefault();gq.focus()}});
-function searchView(){head(`Search · every file and folder in ${esc(short(S.status.root))}`);
+function searchView(){head(`Search · every file and folder in ${esc(short(S.focus))}`);
  $('#main').innerHTML=`<div class="bar"><input id="sq" type="search" placeholder="File or folder name — several words must all match, e.g. invoice 2024 pdf" value="${esc(SQ)}" style="flex:1;min-width:220px" aria-label="Search files and folders"></div><div id="sres"></div>`;
  const i=$('#sq');if(document.activeElement!==gq)i.focus();i.oninput=()=>{SQ=gq.value=i.value;clearTimeout(sqT);sqT=setTimeout(()=>runSearch(SQ),200)};runSearch(SQ)}
 async function runSearch(v){SQ=v.trim();if($('#sq')&&$('#sq').value.trim()!==SQ)$('#sq').value=SQ;const el=$('#sres');if(!el)return;
  if(SQ.length<2){el.innerHTML='<div class="spin">Type at least 2 characters. Every file in the scan is searched, small ones too.</div>';return}
  const t0=performance.now(),my=++SRV;el.innerHTML=spinner('Searching…');
- try{const rows=await api(`/api/search?q=${q(SQ)}&path=${q(S.status.root)}`);if(my!==SRV)return;scope('srch',rows);
+ try{const rows=await api(`/api/search?q=${q(SQ)}&path=${q(S.focus)}`);if(my!==SRV)return;scope('srch',rows);
   el.innerHTML=selBar('srch','trash',`<span class="mut sm">${plural(rows.length,'result')} in ${Math.round(performance.now()-t0)} ms${rows.length>=300?' · the 300 largest are shown, add words to narrow down':''}</span>`)+(rows.length?fileTable('srch',rows,{path:true}):'<div class="spin">No matches.</div>');upd('srch')}
  catch(e){if(my===SRV)el.innerHTML=`<div class="spin">Error: ${esc(e.message)}</div>`}}
 
 let dupMin=store.get('dupmin',10);
-async function dupes(){const rv=RV;head('Duplicate files · byte-for-byte identical (full content hash)');
+async function dupes(){const rv=RV;head(`Duplicate files in ${esc(short(S.focus))} · byte-for-byte identical (full content hash)`);
  let d;try{d=await api('/api/dupes')}catch(e){return fail(e)}if(stale(rv))return;
  const ctl=`<label class="mut">Files of at least <input type=number id=dmin value=${dupMin} min=1 style="width:80px"> MB</label><button class="btn pri" id="drun" ${d.running?'disabled':''}>${d.groups?'Search again':'Find duplicates'}</button>`;
  let body;
  if(d.running){const pct=d.phase==='full'?(d.tbytes?d.bytes/d.tbytes:0):(d.total?d.done/d.total:0);
   body=`<div class="card" style="max-width:640px"><h3>${d.phase==='full'?'Comparing full contents':'Comparing samples'}</h3><div class="kpi"><div class="v">${Math.round(pct*100)}%</div><div class="s">${d.phase==='full'?`${fmt(d.bytes)} of ${fmt(d.tbytes)} read`:`${num(d.done)} of ${plural(d.total,'candidate')}`}</div></div><div class="meter"><i style="width:${pct*100}%"></i></div></div>`;
   setTimeout(()=>!stale(rv)&&dupes(),900)}
- else if(!d.groups)body=`<div class="card" style="max-width:640px"><p>Finds files with exactly the same content anywhere in <b>${esc(short(S.status.root))}</b>: same size first, then a sample of the content, then the full content. Only files that match byte for byte are listed.</p><p class="mut sm">Files over 1 MB are compared. Large disks can take a few minutes; you can leave this page meanwhile.</p></div>`;
+ else if(!d.groups)body=`<div class="card" style="max-width:640px"><p>Finds files with exactly the same content anywhere in <b>${esc(short(S.focus))}</b>: same size first, then a sample of the content, then the full content. Only files that match byte for byte are listed.</p><p class="mut sm">Files over 1 MB are compared. Large disks can take a few minutes; you can leave this page meanwhile.</p></div>`;
  else{const rows=d.groups.flatMap((g,gi)=>g.files.map(f=>({path:f.path,size:g.size,mtime:f.mtime,kind:'file',type:f.type,g:gi})));scope('dup',rows);
   const waste=d3.sum(d.groups,g=>g.size*(g.files.length-1));
-  body=`<div class="bar"><span class="mut sm">${plural(d.groups.length,'group')} · <b>${fmt(waste)}</b> can be freed by keeping one copy each${d.root&&d.root!==S.status.root?` · results for ${esc(short(d.root))}`:''} · ${age(d.at)}</span>
+  body=`<div class="bar"><span class="mut sm">${plural(d.groups.length,'group')} · <b>${fmt(waste)}</b> can be freed by keeping one copy each${d.root&&d.root!==S.focus?` · <b>results for ${esc(short(d.root))}</b>, press “Search again” for this folder`:''} · ${age(d.at)}</span>
    <button class="btn sm" data-dupkeep="new">Select all but the newest</button><button class="btn sm" data-dupkeep="old">Select all but the oldest</button></div>`+
    d.groups.slice(0,500).map((g,gi)=>`<div class="card dg"><h4>${TYPE_ICO[g.files[0].type]??'📄'} ${fmt(g.size)} × ${g.files.length}<span class="mut sm">${fmt(g.size*(g.files.length-1))} extra</span></h4><table>${g.files.map(f=>`<tr ${pend(f.path)}><td style="width:28px">${cbox(f.path,'dup')}</td><td class="path">${esc(short(f.path))}</td><td class="sm mut" style="white-space:nowrap">${age(f.mtime)}</td><td class="sm" style="white-space:nowrap"><a data-ex="${esc(f.path.replace(/\/[^/]*$/,''))}">open</a> · <a data-rv="${esc(f.path)}">Finder</a></td></tr>`).join('')}</table></div>`).join('')+
    (d.groups.length>500?`<div class="spin">The 500 groups that free the most space are shown.</div>`:'')}
  $('#main').innerHTML=(d.groups&&!d.running?selBar('dup','trash',ctl):`<div class="bar">${ctl}</div>`)+body;
  $('#dmin').onchange=e=>{dupMin=+e.target.value||10;store.set('dupmin',dupMin)};
- $('#drun').onclick=async()=>{try{await post('/api/dupes/run',{min:dupMin});dupes()}catch(e){toast('Error: '+e.message)}};upd('dup')}
+ $('#drun').onclick=async()=>{try{await post('/api/dupes/run',{min:dupMin,path:S.focus});dupes()}catch(e){toast('Error: '+e.message)}};upd('dup')}
 function dupPick(mode){const s=SC.dup;if(!s)return;s.sel.clear();
  d3.groups(s.rows,r=>r.g).forEach(([,fs])=>{const keep=fs.reduce((a,b)=>(mode==='new'?b.mtime>a.mtime:b.mtime<a.mtime)?b:a);fs.forEach(f=>f!==keep&&!PEND.has(f.path)&&s.sel.add(f.path))});
  document.querySelectorAll('input[data-sc="dup"]').forEach(i=>i.checked=s.sel.has(i.dataset.p));upd('dup')}
 
 let oldYears=store.get('oldy',2),oldMin=store.get('oldmin',50);
-async function oldFiles(){const rv=RV;head('Old files · large files nobody changed for years');loading();try{
- const rows=await api(`/api/big?min=${oldMin}&older=${oldYears*365}`);if(stale(rv))return;scope('old',rows);
+async function oldFiles(){const rv=RV;head(`Old files in ${esc(short(S.focus))} · large files nobody changed for years`);loading();try{
+ const rows=await api(`/api/big?min=${oldMin}&older=${oldYears*365}&path=${q(S.focus)}`);if(stale(rv))return;scope('old',rows);
  $('#main').innerHTML=selBar('old','trash',`<label class="mut">Unchanged for <select id="oy">${[1,2,3,5,10].map(y=>`<option value="${y}" ${y==oldYears?'selected':''}>${plural(y,'year')}</option>`).join('')}</select></label>
   <label class="mut">at least <input type=number id=om value=${oldMin} min=1 style="width:80px"> MB</label><span class="mut sm">${plural(rows.length,'file')} · ${fmt(d3.sum(rows,r=>r.size))}</span>`)+(rows.length?fileTable('old',rows,{path:true}):'<div class="spin">No files match.</div>');
  $('#oy').onchange=e=>{oldYears=+e.target.value;store.set('oldy',oldYears);oldFiles()};$('#om').onchange=e=>{oldMin=+e.target.value||50;store.set('oldmin',oldMin);oldFiles()};upd('old')}catch(e){fail(e)}}
@@ -755,7 +793,7 @@ async function graphView(){const rv=RV;head(`Graph · how folders, file types, c
   .on('click',(e,n)=>{hideTip();if((n.kind==='dir'||n.kind==='root')&&n.path!==S.focus)setFocus(n.path);else if(n.kind==='file'){S.tab='explorer';setFocus(n.path.replace(/\/[^/]*$/,''))}else if(n.kind==='container')go('docker')})}
 
 // ---------- events ----------
-const SEL='[data-t],[data-go],[data-ex],[data-rv],[data-open],[data-del],[data-delsel],[data-cell],[data-lb],[data-lbn],[data-close],[data-backdrop],[data-chart],[data-metric],[data-view],[data-ft],[data-sort],[data-tile],[data-pick],[data-pickauto],[data-autorun],[data-clearsearch],[data-jx],[data-csv],[data-dupkeep],[data-gnode]';
+const SEL='[data-t],[data-go],[data-ex],[data-rv],[data-open],[data-del],[data-delsel],[data-cell],[data-lb],[data-lbn],[data-close],[data-backdrop],[data-chart],[data-metric],[data-view],[data-ft],[data-sort],[data-tile],[data-pick],[data-pickauto],[data-autorun],[data-clearsearch],[data-jx],[data-csv],[data-dupkeep],[data-gnode],[data-jerr]';
 document.addEventListener('click',async e=>{
  const cb=e.target.matches('input[type=checkbox]')?e.target:null;
  if(cb){const g=cb.dataset;
@@ -768,6 +806,7 @@ document.addEventListener('click',async e=>{
  if(g.backdrop!==undefined){if(e.target===t)closeModal();return}
  if(g.close!==undefined)return closeModal();
  if(g.jx){HIDE.add(+g.jx);drawJobs();return}
+ if(g.jerr)return jobErrors(+g.jerr);
  if(g.t){closeModal();go(g.t)}
  if(g.go){closeModal();if(!['treemap','sunburst','overview','charts','explorer'].includes(S.tab))S.tab='explorer';setFocus(g.go)}
  if(g.ex){closeModal();S.tab='explorer';setFocus(g.ex)}
@@ -795,6 +834,67 @@ document.addEventListener('click',async e=>{
  }catch(er){toast('Error: '+er.message)}
 });
 let rt;addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>['treemap','sunburst','charts'].includes(S.tab)&&render(),250)});
-setInterval(()=>api('/api/ping').catch(()=>{}),20000);
-poll();pollJobs();
+let ACT=false;['pointerdown','keydown','wheel','mousemove'].forEach(t=>addEventListener(t,()=>ACT=true,{passive:true}));
+setInterval(()=>{api('/api/ping'+(ACT?'?a=1':'')).catch(()=>{});ACT=false},20000); // server exits after 30 min without use
+// AI assistant: Claude Code runs on the server; its permission prompts are answered here
+const AI={ev:[],n:0,busy:false,ok:true,t:null};
+const aiArg=i=>i.command||i.file_path||i.path||i.pattern||i.url||JSON.stringify(i);
+function md(s){const out=[];let code=null,tbl=null,list=null;
+ const inl=t=>esc(t).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>');
+ const flush=()=>{if(tbl)out.push('<table>'+tbl.map((r,i)=>'<tr>'+r.map(c=>i?`<td>${inl(c)}</td>`:`<th>${inl(c)}</th>`).join('')+'</tr>').join('')+'</table>');
+  if(list)out.push('<ul>'+list.map(x=>`<li>${inl(x)}</li>`).join('')+'</ul>');tbl=list=null};
+ for(const l of s.split('\n')){
+  if(code){if(l.startsWith('```')){out.push(`<pre>${esc(code.join('\n'))}</pre>`);code=null}else code.push(l);continue}
+  if(l.startsWith('```')){flush();code=[];continue}
+  if(/^\s*\|/.test(l)){if(list)flush();if(!/^\s*\|[\s:|-]+\|\s*$/.test(l))(tbl??=[]).push(l.trim().replace(/^\||\|$/g,'').split('|').map(c=>c.trim()));continue}
+  const m=l.match(/^\s*(?:[-*]|\d+\.)\s+(.*)/);if(m){if(tbl)flush();(list??=[]).push(m[1]);continue}
+  flush();const h=l.match(/^#{1,4}\s+(.*)/);if(h)out.push(`<h4>${inl(h[1])}</h4>`);else if(l.trim())out.push(`<p>${inl(l)}</p>`)}
+ if(code)out.push(`<pre>${esc(code.join('\n'))}</pre>`);flush();return out.join('')}
+function aiEv(e,outs){
+ if(e.k==='user')return `<div class="ai-u">${esc(e.text)}</div>`;
+ if(e.k==='text')return `<div class="ai-a">${md(e.text)}</div>`;
+ if(e.k==='tool'){const o=outs[e.id],d=e.input.description;
+  return `<details class="ai-t${o?.err?' err':''}" data-tid="${esc(e.id)}"><summary>${o?'':'… '}⚙ ${esc(e.name)} · ${esc(d||aiArg(e.input))}</summary>${d?`<pre>${esc(aiArg(e.input))}</pre>`:''}${o?`<pre>${esc(o.text||'(no output)')}</pre>`:''}</details>`}
+ if(e.k==='ask'){const st={allow:'✓ Allowed',always:'✓ Allowed for this chat',deny:'✕ Denied'}[e.state];
+  return `<div class="ai-ask ${e.state}"><b>Claude Code wants to use ${esc(e.name)}</b>${e.desc?`<div class="mut sm">${esc(e.desc)}</div>`:''}<pre>${esc(aiArg(e.input))}</pre>
+  <div class="bar">${st?`<span class="mut sm">${st}</span>`:`<button class="btn pri" data-aip="allow" data-id="${esc(e.id)}">Allow</button><button class="btn" data-aip="always" data-id="${esc(e.id)}">Allow for this chat</button><button class="btn" data-aip="deny" data-id="${esc(e.id)}">Deny</button>`}</div></div>`}
+ if(e.k==='done')return e.err?`<div class="sm" style="color:var(--red)">${esc(e.err)}</div>`:'';
+ if(e.k==='err')return `<div class="warn">${esc(e.text)}</div>`;
+ return ''}
+const AI_STARTERS=['Find large caches, build artifacts and disk images I can safely delete','Which Docker images, volumes and build cache are unused?','What is using the most space in the current folder?','Find old iOS/Android simulators and SDK images'];
+function drawAI(){const L=$('#ailog');if(!L)return;const near=L.scrollHeight-L.scrollTop-L.clientHeight<120;
+ const open=new Set([...L.querySelectorAll('details[open]')].map(d=>d.dataset.tid)),outs={};AI.ev.forEach(e=>{if(e.k==='out')outs[e.id]=e});
+ L.innerHTML=AI.ev.length?AI.ev.map(e=>aiEv(e,outs)).join('')+(AI.busy&&!AI.ev.some(e=>e.k==='ask'&&e.state==='pending')?'<div class="ai-busy">Claude Code is working…</div>':'')
+  :AI.ok?`<div class="card"><h3>Ask Claude Code about your disks</h3><p class="mut">It runs Claude Code on this computer with your Claude subscription, so there are no API charges. Reading is free; anything that changes files asks you here first.</p><div class="chips">${AI_STARTERS.map(t=>`<button class="chip" data-aiq="${esc(t)}">${esc(t)}</button>`).join('')}</div></div>`
+  :`<div class="warn">Claude Code (<code>claude</code>) was not found on this computer. Install it from <a href="https://claude.com/claude-code" target="_blank" rel="noopener">claude.com/claude-code</a> and log in once in a terminal.</div>`;
+ L.querySelectorAll('details').forEach(d=>open.has(d.dataset.tid)&&(d.open=true));
+ if(near)L.scrollTop=L.scrollHeight;
+ $('#aiacct').textContent=AI.acct?'Claude subscription · '+AI.acct:'';
+ $('#aisend').disabled=AI.busy||!AI.ok;$('#aistop').disabled=!AI.busy}
+async function aiPoll(){clearTimeout(AI.t);
+ try{const r=await api('/api/ai?since='+AI.n);
+  if(r.n<AI.n){AI.ev=[];AI.n=0;return aiPoll()} // chat was reset from another tab
+  let ch=r.events.length>0||AI.busy!==r.busy||AI.ok!==r.available;
+  r.asks.forEach(a=>{const e=AI.ev[a.i];if(e&&e.state!==a.state){e.state=a.state;ch=true}});
+  AI.ev.push(...r.events);AI.n=r.n;AI.busy=r.busy;AI.ok=r.available;AI.acct=r.account;
+  const b=$('#aib');b.hidden=!r.pending;b.textContent=r.pending;
+  if(ch&&S.tab==='assistant')drawAI()}catch(e){}
+ if(AI.busy||S.tab==='assistant')AI.t=setTimeout(aiPoll,AI.busy?800:4000)}
+async function aiSend(text){text=text.trim();if(!text||AI.busy)return;
+ try{await post('/api/ai/send',{text,path:S.focus});$('#aitxt').value='';AI.busy=true;aiPoll()}catch(e){toast('Error: '+e.message)}}
+function assistant(){$('#crumb').innerHTML='<span class="mut">AI assistant · runs Claude Code on this computer</span>';
+ $('#main').innerHTML=`<div class="ai"><div class="ai-log" id="ailog" aria-live="polite"></div>
+ <form class="ai-in" id="aiform"><textarea id="aitxt" rows="2" aria-label="Message to Claude Code" placeholder="Ask Claude Code to analyze or clean up… (Enter sends, Shift+Enter adds a line)"></textarea>
+ <div class="bar" style="margin:0"><button class="btn pri" id="aisend">Send</button><button class="btn" type="button" id="aistop">Stop</button><span class="mut sm" id="aiacct" style="margin-left:auto"></span><button class="btn" type="button" id="aireset">New chat</button></div></form></div>`;
+ const T=$('#aitxt');T.focus();
+ $('#aiform').onsubmit=e=>{e.preventDefault();aiSend(T.value)};
+ T.onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();aiSend(T.value)}};
+ $('#aistop').onclick=()=>post('/api/ai/stop',{}).then(aiPoll).catch(e=>toast('Error: '+e.message));
+ $('#aireset').onclick=async()=>{await post('/api/ai/reset',{});AI.ev=[];AI.n=0;AI.busy=false;drawAI();aiPoll()};
+ $('#ailog').onclick=async e=>{const b=e.target.closest('[data-aip],[data-aiq]');if(!b)return;
+  if(b.dataset.aiq)return aiSend(b.dataset.aiq);
+  b.parentNode.querySelectorAll('button').forEach(x=>x.disabled=true);
+  try{await post('/api/ai/permit',{id:b.dataset.id,decision:b.dataset.aip});aiPoll()}catch(er){toast('Error: '+er.message);aiPoll()}};
+ drawAI();aiPoll()}
+poll();pollJobs();aiPoll();
 </script></body></html>

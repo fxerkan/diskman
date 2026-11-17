@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """diskman — disk analysis + cleanup web UI (macOS, Linux, Windows; Python 3.12+, stdlib only).
-  diskman [port]                  opens the UI in the browser (exits ~2 min after the tab closes)
+  diskman [port]                  opens the UI in the browser, runs in the background (port 18791; exits after 30 min unused)
   diskman --serve [--host H] [port]   headless server (no browser, never exits); --host 0.0.0.0 for LAN/mobile
   diskman --set-password          user + password for remote (non-localhost) access; --clear-password removes it
   diskman --install [--lan]       run as a background service (launchd / systemd / Task Scheduler); --uninstall
@@ -15,6 +15,7 @@ from urllib.parse import urlparse, parse_qs
 HERE = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, HERE)
 import cleaner as C  # noqa: E402
+import assistant as AI  # noqa: E402
 
 WIN, MAC = os.name == "nt", sys.platform == "darwin"
 norm = lambda p: os.path.normpath(p).replace(os.sep, "/")  # içeride her yerde "/" (Windows da kabul eder)
@@ -27,6 +28,7 @@ THUMBS = os.path.join(CACHE, "thumbs")
 ALL = "*"  # birleşik görünüm: tüm diskler tek ağaç
 VERSION = "2.0.0"
 REPO = "https://github.com/fxerkan/diskman"
+PORT = 18791  # sabit: tarayıcı tercihleri (görünüm, filtre) kalıcı olsun; 8791 başka araçlarla çakışıyordu
 HOSTFS = norm(os.environ.get("DISKMAN_HOSTFS", "")).rstrip("/")  # konteyner: ana makinenin / dizini burada (ör. /host)
 SERVE = [False]  # servis/konteyner modu: kendi zamanlayıcısı çalışır, tarayıcı açılmaz
 THREADS = int(os.environ.get("DISKMAN_THREADS") or 16)  # disk başına; her disk kendi havuzunda paralel taranır
@@ -94,7 +96,7 @@ _idx_lock = threading.Lock()
 def new_state(root):  # kind: full | inc | cache; _changed: son kontrolde mtime'ı değişen (node, path) klasörleri
     return {"root": root, "tree": None, "running": False, "done": False, "files": 0, "dirs": 0, "bytes": 0,
             "start": 0, "end": 0, "cur": "", "errors": 0, "charts": None, "kind": "", "full_at": 0,
-            "checking": False, "changed": None, "from_cache": False, "_changed": []}
+            "checking": False, "changed": None, "from_cache": False, "_changed": [], "_stale": set()}
 
 
 def kid_path(p, k):
@@ -242,6 +244,7 @@ def scan(S):
     S.update(tree=None, running=True, done=False, files=0, dirs=0, bytes=0, errors=0,
              start=time.time(), cur=root, charts=None, kind="full", changed=None, from_cache=False)
     S["_changed"].clear()
+    S["_stale"] = set()
     accs = _crawl(S, [(tree, root)], st.st_dev, time.time(), set())
     _finish(tree)
     now = time.time()
@@ -293,6 +296,7 @@ def load_cache(S):
     root = S["root"]
     S.update(tree=None, running=True, done=False, start=time.time(), cur="loading cache…", kind="cache", changed=None)
     S["_changed"].clear()
+    S["_stale"] = set()
     with open(_cache_path(root), "rb") as f:
         d = pickle.load(f)  # ponytail: kendi ürettiğimiz yerel dosya; ~/.cache'e yazabilen zaten her şeyi yapabilir
     if d.get("v") != 2:  # ad dizini yok → tam tarama
@@ -361,6 +365,12 @@ def check_changes(S):
             out = [it for it, c in zip(items, ex.map(changed, items, chunksize=4096)) if c]
     finally:
         S["_changed"][:] = out
+        st = set()
+        for nd, _ in out:  # değişen klasör + üstleri: arayüz bunları "güncel değil" diye işaretler
+            while nd is not None and id(nd) not in st:
+                st.add(id(nd))
+                nd = nd.parent
+        S["_stale"] = st
         S.update(checking=False, changed=len(out))
 
 
@@ -393,6 +403,7 @@ def rescan(S):
     finally:
         order = _finish(tree)
         S["_changed"].clear()
+        S["_stale"] = set()
         S.update(running=False, end=time.time(), cur="", files=tree.n, bytes=tree.size, dirs=len(order) - 1, changed=0)
         _sug_cache.clear()
     save_cache(S)
@@ -437,6 +448,34 @@ def start_scan(root, mode="auto"):
             continue  # zaten taranıyor / değişiklik yok → sadece görünüme geç
         S["running" if mode != "auto" or not S["tree"] else "checking"] = True  # yarışı önle: hemen meşgul
         threading.Thread(target=_open_warm, args=(S, mode), daemon=True).start()
+
+
+def refresh(path):
+    """Seçili klasörü (alt ağacı + üst klasörünün doğrudan içeriği) yeniden tara: Finder'da silinen/eklenen yansısın.
+    Bekleyen değişiklik kontrolü bitince onun bulduklarıyla birlikte tek artımlı taramada işlenir."""
+    path = norm(path)
+    S = owner(path)
+    if not S:
+        raise ValueError("folder is not in the scanned tree")
+    if S["running"]:
+        raise ValueError("a scan is already running")
+    nd = find_dir(path)
+    S["running"] = True  # hemen meşgul: ikinci tık/yarış olmasın
+
+    def run():
+        try:
+            while S["checking"]:
+                time.sleep(0.2)
+            items = list(S["_changed"]) + list(walk_tree(nd, path))
+            if nd.parent:
+                items.append((nd.parent, path.rsplit("/", 1)[0] or "/"))
+            seen = set()
+            S["_changed"][:] = [it for it in items if id(it[0]) not in seen and not seen.add(id(it[0]))]
+            rescan(S)
+        finally:
+            S["running"] = False
+    threading.Thread(target=run, daemon=True).start()
+    return {"ok": 1}
 
 
 def home_dirs():
@@ -505,9 +544,13 @@ def find_dir(path):
     return r[0]
 
 
-def jnode(nd, path, depth, top):
+def stale_ids():
+    return set().union(*(S.get("_stale", ()) for S in list(ROOTS.values())))
+
+
+def jnode(nd, path, depth, top, st=frozenset()):
     d = {"name": nd.name if nd.parent or path == ALL else path, "path": path, "size": nd.size, "n": nd.n, "kind": "dir",
-         "mtime": nd.mtime, "nk": len(nd.kids)}
+         "mtime": nd.mtime, "nk": len(nd.kids), **({"stale": 1} if id(nd) in st else {})}
     if depth <= 0:
         return d
     items = [(k.size, 0, k) for k in nd.kids] + [(f[1], 1, f) for f in nd.files]
@@ -516,7 +559,7 @@ def jnode(nd, path, depth, top):
     for size, isfile, x in items[:top]:
         p = path.rstrip("/") + "/" + x[0] if isfile else kid_path(path, x)
         kids.append({"name": x[0], "path": p, "size": size, "kind": "file", "mtime": x[2], "type": ftype(x[0])}
-                    if isfile else jnode(x, p, depth - 1, top))
+                    if isfile else jnode(x, p, depth - 1, top, st))
     rest = items[top:]
     if rest:
         kids.append({"name": f"{len(rest)} other items", "size": sum(r[0] for r in rest), "kind": "other",
@@ -528,7 +571,7 @@ def jnode(nd, path, depth, top):
 
 
 def tree_json(path, depth, top):
-    return jnode(find_dir(path), path if path == ALL else norm(path), min(depth, 4), min(top, 5000))
+    return jnode(find_dir(path), path if path == ALL else norm(path), min(depth, 4), min(top, 5000), stale_ids())
 
 
 def walk_tree(nd, path):
@@ -562,22 +605,24 @@ def cell(path, t, a):
             "small": max(0, total - listed)}
 
 
-def all_big(min_bytes=BIG):
+def all_big(min_bytes=BIG, path=None):
+    path = path or VIEW[0]
+    path = path if path in (None, ALL) else norm(path)
     try:
-        r = find(VIEW[0]) if VIEW[0] else None
+        r = find(path) if path else None
     except ValueError:
         return []
     if not r or r[1]:
         return []
-    return [(p.rstrip("/") + "/" + f[0], f[1], f[2]) for nd, p in walk_tree(r[0], VIEW[0])
+    return [(p.rstrip("/") + "/" + f[0], f[1], f[2]) for nd, p in walk_tree(r[0], path)
             for f in nd.files if f[1] >= min_bytes]
 
 
-def big_files(min_mb, older_days=0):
+def big_files(min_mb, older_days=0, path=None):
     if not any(S["tree"] for S in ROOTS.values()):
         raise ValueError("no scan yet")
     cut = time.time() - float(older_days) * 86400
-    res = [{"path": p, "size": s, "mtime": m, "type": ftype(p)} for p, s, m in all_big(int(float(min_mb) * (1 << 20)))
+    res = [{"path": p, "size": s, "mtime": m, "type": ftype(p)} for p, s, m in all_big(int(float(min_mb) * (1 << 20)), path)
            if not older_days or m < cut]
     return sorted(res, key=lambda i: -i["size"])[:2000]
 
@@ -690,13 +735,13 @@ def _hash(p, full):
     return h.hexdigest()
 
 
-def dup_scan(min_bytes):
+def dup_scan(min_bytes, path=None):
     """Aynı boyut → örnek özet → tam özet (BLAKE2): yalnız içeriği birebir aynı dosyalar kopya sayılır.
     ponytail: ağaçtaki ≥1 MB dosyalar; küçükler ağaçta tek tek tutulmuyor."""
-    DUP.update(running=True, groups=None, min=min_bytes, root=VIEW[0], at=0)
+    DUP.update(running=True, groups=None, min=min_bytes, root=path or VIEW[0], at=0)
     try:
         by = {}
-        for p, s, m in all_big(max(int(min_bytes), BIG)):
+        for p, s, m in all_big(max(int(min_bytes), BIG), path):
             by.setdefault(s, []).append((s, p, m))
         cands, g = [c for v in by.values() if len(v) > 1 for c in v], {}
         for full in (False, True):
@@ -716,13 +761,13 @@ def dup_scan(min_bytes):
         DUP.update(running=False, at=time.time())
 
 
-def dupes_start(min_mb):
+def dupes_start(min_mb, path=None):
     if DUP["running"]:
         return DUP
     if not any(S["tree"] for S in ROOTS.values()):
         raise ValueError("no scan yet")
     DUP["running"] = True
-    threading.Thread(target=dup_scan, args=(float(min_mb) * (1 << 20),), daemon=True).start()
+    threading.Thread(target=dup_scan, args=(float(min_mb) * (1 << 20), path), daemon=True).start()
     return {k: v for k, v in DUP.items() if k != "groups"}
 
 
@@ -926,7 +971,7 @@ def ls(path):
     except ValueError:
         r = None
     kids = {k.name: k for k in r[0].kids} if r and not r[1] else {}
-    rows = []
+    rows, st = [], stale_ids()
     for e in os.scandir(path):
         try:
             st = e.stat(follow_symlinks=False)
@@ -936,7 +981,7 @@ def ls(path):
         k = kids.get(e.name)
         rows.append({"path": norm(e.path), "name": e.name, "kind": "dir" if d else "file", "mtime": st.st_mtime,
                      "size": (k.size if k else -1) if d else usage(st), "n": k.n if k else None,
-                     "type": None if d else ftype(e.name)})
+                     "type": None if d else ftype(e.name), **({"stale": 1} if k and id(k) in st else {})})
     return {"rows": sorted(rows, key=lambda x: -x["size"]), "scanned": bool(r)}
 
 
@@ -1119,9 +1164,14 @@ def run_clean(items, mode, source="manual"):
             _items_cache[k] = [i for i in v if i["path"] not in done]
         if "v" in _sug_cache:
             _sug_cache["v"] = [x for x in _sug_cache["v"] if x["path"] not in done]
+        touched = {}
         for it in items:
             if it["path"] in r["done"] and it["action"] != "cmd":
                 tree_forget(it["path"], it.get("size", 0), contents=it["action"] == "contents")
+                if (o := owner(it["path"])) and not o["running"]:
+                    touched[o["root"]] = o
+        for o in touched.values():  # kalıcı önbellek de silinenleri bilsin (yeniden açınca eski hâli görünmesin)
+            save_cache(o)
         return r
     return run
 
@@ -1366,7 +1416,24 @@ def status():
             "version": VERSION, "repo": REPO, "hostfs": HOSTFS}
 
 
-def charts():
+_sub_charts = {}
+
+
+def charts(path=None):
+    path = path if path in (None, ALL) else norm(path)
+    if path and path != VIEW[0] and not (VIEW[0] == ALL and path in disk_roots()):
+        S = owner(path)
+        if not S or not os.path.isdir(path):
+            raise ValueError("folder is not in the scanned tree")
+        key = (path, S["end"])
+        if key not in _sub_charts:  # ponytail: alt klasör için ayrı, geçici tarama (uzantı/boyut/ay ağaçta tutulmuyor)
+            st = os.stat(path)
+            accs = _crawl(new_state(path), [(Node(path, None, st.st_mtime), path)], st.st_dev, time.time(), set())
+            _sub_charts.clear()
+            _sub_charts[key] = _charts(accs)
+        return _sub_charts[key]
+    if path and path != VIEW[0]:
+        return (ROOTS.get(path) or {}).get("charts") or {}
     cs = [s["charts"] for s in _view_states() if s["charts"]]
     if len(cs) < 2:
         return cs[0] if cs else {}
@@ -1504,7 +1571,9 @@ LOGIN_HTML = (_PAGE % {"title": "DiskMan", "btn": "Log in", "url": "/api/login",
 
 
 # ---------- HTTP ----------
-_last_ping = [time.time() + 480]  # ilk açılışta 10 dk bekle, sonra 2 dk ping yoksa kapan
+IDLE = 30 * 60  # bu kadar süre kullanılmazsa (sekme açık olsa da) kapan
+_last_ping = [time.time()]
+LIVE_PORT = [PORT]  # asistanın sistem isteminde DiskMan API adresi
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1573,7 +1642,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, SETUP_HTML, "text/html; charset=utf-8")
             return self._send(403, b"Remote access is off: set a password from your home network or in Settings.\n",
                               "text/plain; charset=utf-8")
-        _last_ping[0] = time.time()
+        if u.path == "/" or body is not None or q.get("a"):  # sayfa açma, işlem, ya da kullanıcı etkileşimli ping
+            _last_ping[0] = time.time()
         if u.path == "/":
             with open(os.path.join(HERE, "index.html"), "rb") as f:
                 return self._send(200, f.read(), "text/html; charset=utf-8")
@@ -1592,10 +1662,10 @@ class Handler(BaseHTTPRequestHandler):
                 "/api/tree": lambda: tree_json(q.get("path", VIEW[0]), int(q.get("depth", 2)), int(q.get("top", 40))),
                 "/api/stats": lambda: stats(q.get("path", VIEW[0])),
                 "/api/cell": lambda: cell(q.get("path", VIEW[0]), int(q["type"]), int(q["age"])),
-                "/api/charts": charts,
+                "/api/charts": lambda: charts(q.get("path")),
                 "/api/ls": lambda: ls(q.get("path", HOME)),
                 "/api/search": lambda: search(q["q"], q.get("path", VIEW[0] or HOME)),
-                "/api/big": lambda: big_files(q.get("min", 500), q.get("older", 0)),
+                "/api/big": lambda: big_files(q.get("min", 500), q.get("older", 0), q.get("path")),
                 "/api/empty": lambda: empty_dirs(q.get("path", VIEW[0])),
                 "/api/dupes": lambda: DUP,
                 "/api/growth": lambda: growth(q.get("path", VIEW[0]), q.get("since")),
@@ -1610,6 +1680,7 @@ class Handler(BaseHTTPRequestHandler):
                 "/api/auto/preview": lambda: C.auto_clean(check, dry=True),
                 "/api/reveal": lambda: reveal(q["path"], True, self.local),
                 "/api/open": lambda: reveal(q["path"], False, self.local),
+                "/api/ai": lambda: AI.state(int(q.get("since", 0))),
             }.get(u.path)
             if body is not None:
                 b = json.loads(body or "{}")
@@ -1619,9 +1690,14 @@ class Handler(BaseHTTPRequestHandler):
                      "/api/quick/run": quick_job,
                      "/api/auto/run": auto_job,
                      "/api/docker/run": lambda: docker_job(set(b.get("ids", []))),
-                     "/api/dupes/run": lambda: dupes_start(b.get("min", 10)),
+                     "/api/dupes/run": lambda: dupes_start(b.get("min", 10), b.get("path")),
+                     "/api/refresh": lambda: refresh(b["path"]),
                      "/api/config": lambda: save_conf(b),
                      "/api/setup": lambda: save_auth(b),  # parola değiştir (oturum açıkken)
+                     "/api/ai/send": lambda: AI.send(b.get("text", ""), b.get("path"), LIVE_PORT[0]),
+                     "/api/ai/permit": lambda: AI.permit(b["id"], b.get("decision", "deny")),
+                     "/api/ai/stop": AI.stop,
+                     "/api/ai/reset": AI.reset,
                      "/api/logout": lambda: {"ok": 1}}.get(u.path)
             if not r:
                 return self._send(404, {"error": "not found"})
@@ -1648,7 +1724,7 @@ def lan_ip():
         return "127.0.0.1"
 
 
-def install(remove, lan, port=8791):
+def install(remove, lan, port=PORT):
     """Arka plan servisi: macOS LaunchAgent, Linux systemd (root), Windows Task Scheduler (yönetici).
     Gereken izni ister: sudo / UAC; macOS'ta Full Disk Access ayar sayfasını açar."""
     exe, script = sys.executable, os.path.realpath(__file__)
@@ -1714,6 +1790,16 @@ WantedBy=multi-user.target
         print("Open that address once to choose the username and password.")
 
 
+def running_at(url):
+    """Bu adreste DiskMan zaten çalışıyor mu (başka bir program değil)?"""
+    import urllib.request
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url + "api/ping", headers={"X-DM": "1"}), timeout=1) as r:
+            return json.load(r).get("ok") == 1
+    except Exception:
+        return False
+
+
 def open_ui(url):
     """Ayardaki tarayıcı ("firefox", "edge:Profile 1"; eski ayar "Profile 2" = Chrome) yoksa varsayılan tarayıcı."""
     pref = C.load_conf().get("browser_profile", "")
@@ -1770,7 +1856,7 @@ def main():
         conf.pop("auth", None)
         C.save_conf(conf)
         return print("Password removed: remote access is off.")
-    port = int(next((x for x in a if x.isdigit()), 8791))  # sabit port: tarayıcı tercihleri (görünüm, filtre) kalıcı olsun
+    port = int(next((x for x in a if x.isdigit()), PORT))
     if "--install" in a or "--uninstall" in a:
         return install("--uninstall" in a, "--lan" in a, port)
     if "--auto-clean" in sys.argv:
@@ -1780,22 +1866,33 @@ def main():
         return
     serve = SERVE[0] = "--serve" in a or bool(os.environ.get("DISKMAN_NO_BROWSER"))
     host = a[a.index("--host") + 1] if "--host" in a else os.environ.get("DISKMAN_HOST", "127.0.0.1")  # 0.0.0.0 → LAN
+    url = f"http://127.0.0.1:{port}/"
+    if not serve and running_at(url):  # zaten açık → yalnız sekmeyi aç
+        return open_ui(url)
+    if not serve and not os.environ.get("DISKMAN_CHILD"):  # terminali tutma: arka planda başlat, tarayıcıyı o açar
+        os.makedirs(CACHE, exist_ok=True)
+        with open(os.path.join(CACHE, "app.log"), "ab") as log:
+            subprocess.Popen([sys.executable, os.path.realpath(__file__), *a], env={**os.environ, "DISKMAN_CHILD": "1"},
+                             stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
+        return
     try:
         srv = ThreadingHTTPServer((host, port), Handler)
-    except OSError:  # meşgulse (ör. zaten açık) rastgele port
+    except OSError:  # port başka bir programda → rastgele port
         srv = ThreadingHTTPServer((host, 0), Handler)
     url = f"http://127.0.0.1:{srv.server_port}/"
+    LIVE_PORT[0] = srv.server_port
     lan = host not in ("127.0.0.1", "localhost")
     print(f"DiskMan: {url}" + (f"  ·  LAN: http://{lan_ip()}:{srv.server_port}/" if lan else "")
-          + ("" if serve else "\n(Exits ~2 min after the tab closes; Ctrl+C also stops it)"), flush=True)
+          + ("" if serve else f"\n(Exits after {IDLE // 60} min without use)"), flush=True)
     if lan and not C.load_conf().get("auth") and os.environ.get("DISKMAN_AUTH") != "off":
         print("No password yet: open the LAN address to set one", flush=True)
     last = cached_roots()
     # servis: tüm diskler paralel (önbellekten anında, sonra değişiklik kontrolü); uygulama: son taranan kök
     start_scan(ALL if serve else last[0]["path"] if last else HOME)
 
-    def watchdog():  # sekmeden ping gelmezse kapan; .app'ten başlatınca süreç asılı kalmasın
-        while time.time() - _last_ping[0] < 120:
+    def watchdog():  # IDLE süresince kullanılmazsa kapan; tarama/silme sürerken bekle
+        while time.time() - _last_ping[0] < IDLE or any(S["running"] for S in list(ROOTS.values())) \
+                or any(j["status"] != "done" for j in JOBS) or AI.busy():
             time.sleep(10)
         os._exit(0)
     if serve:

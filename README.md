@@ -22,4 +22,4 @@ docker build -t diskman:2.0.0 .
 docker compose up -d   # see docker-compose.yml: host / mounted at /host
 ```
 
-Tests: `python3 test_cache.py && python3 test_multi.py && python3 test_tools.py`
+Tests: `python3 test_cache.py && python3 test_multi.py && python3 test_tools.py && python3 test_assistant.py`
