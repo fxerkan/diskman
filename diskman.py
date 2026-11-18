@@ -1681,6 +1681,7 @@ class Handler(BaseHTTPRequestHandler):
                 "/api/reveal": lambda: reveal(q["path"], True, self.local),
                 "/api/open": lambda: reveal(q["path"], False, self.local),
                 "/api/ai": lambda: AI.state(int(q.get("since", 0))),
+                "/api/ai/memory": AI.memory,
             }.get(u.path)
             if body is not None:
                 b = json.loads(body or "{}")
@@ -1697,6 +1698,7 @@ class Handler(BaseHTTPRequestHandler):
                      "/api/ai/send": lambda: AI.send(b.get("text", ""), b.get("path"), LIVE_PORT[0]),
                      "/api/ai/permit": lambda: AI.permit(b["id"], b.get("decision", "deny")),
                      "/api/ai/stop": AI.stop,
+                     "/api/ai/memory": lambda: AI.edit_memory(b),
                      "/api/ai/reset": AI.reset,
                      "/api/logout": lambda: {"ok": 1}}.get(u.path)
             if not r:
